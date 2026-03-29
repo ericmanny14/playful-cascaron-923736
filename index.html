@@ -340,6 +340,8 @@ nav ul a:hover{color:var(--ink)}
 .review-photos{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .review-photo{width:80px;height:80px;border-radius:6px;object-fit:cover;border:1px solid var(--border);cursor:pointer;transition:transform .15s}
 .review-photo:hover{transform:scale(1.05)}
+.fan-photo{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border);transition:transform .15s,box-shadow .15s}
+.fan-photo:hover{transform:scale(1.03);box-shadow:0 4px 12px rgba(0,0,0,.25)}
 /* ── PHOTO LIGHTBOX ── */
 .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99999;align-items:center;justify-content:center;cursor:pointer}
 .lightbox.open{display:flex}
@@ -818,6 +820,12 @@ nav ul a:hover{color:var(--ink)}
         </div>
       </div>
 
+            <!-- Fan Photos Section -->
+      <div id="fan-photos-section" style="display:none;margin-bottom:24px">
+        <h3 class="section-head">Fan Photos</h3>
+        <div id="fan-photos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:10px"></div>
+      </div>
+
             <h3 class="section-head">Community Reviews</h3>
       <div id="venue-reviews-list"><div class="loading-cards"><span class="spinner"></span> Loading...</div></div>
       <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="handleReviewClick()">+ Add Your 141 Review</button>
@@ -1265,7 +1273,7 @@ let currentVenueId = null;
 const reactions = {};
 let _venueCache = null;        // cached venue list for browse
 let _venueCacheTime = 0;       // timestamp of last fetch
-const VENUE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const VENUE_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
 // ═══════════════════════════════════
 // PAGE & UI HELPERS
@@ -1384,11 +1392,7 @@ async function signInWithGoogle() {
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin + window.location.pathname,
-      queryParams: {
-        access_type: 'offline',
-        prompt: 'consent',
-      }
+      redirectTo: window.location.origin + window.location.pathname
     }
   });
   if (error) showToast('Google sign-in error: ' + error.message, 'error');
@@ -1573,6 +1577,7 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
   const level = getScoutLevel(count);
   await sb.from('profiles').update({ venues_reviewed: count, scout_level: level }).eq('id', currentUser.id);
 
+  _venueCache = null; // bust cache so updated scores and photos appear
   return { totalScore, venueId };
 }
 
@@ -1761,6 +1766,8 @@ async function loadVenueDetail(venueId, venueName) {
       document.getElementById('venue-review-count').textContent = 'No reviews yet';
     }
     document.getElementById('vd-revcount').textContent = '0';
+    const _fanSec = document.getElementById('fan-photos-section');
+    if (_fanSec) _fanSec.style.display = 'none';
     document.getElementById('venue-reviews-list').innerHTML = '<div class="empty-state"><h3>No Reviews Yet</h3><p>Be the first to rate this venue!</p></div>';
     loadAdminSpotlight(venueId);
     return;
@@ -1807,6 +1814,20 @@ async function loadVenueDetail(venueId, venueName) {
       ).join('');
     } else {
       cpCard.style.display = 'none';
+    }
+  }
+
+  // Fan photos section (main content area)
+  const fanSection = document.getElementById('fan-photos-section');
+  const fanGrid = document.getElementById('fan-photos-grid');
+  if (fanSection && fanGrid) {
+    if (communityPhotos.length) {
+      fanSection.style.display = 'block';
+      fanGrid.innerHTML = communityPhotos.map(url =>
+        `<img class="fan-photo" src="${url}" alt="Fan photo" onclick="openLightbox('${url}')">`
+      ).join('');
+    } else {
+      fanSection.style.display = 'none';
     }
   }
 
@@ -2606,6 +2627,10 @@ sb.auth.onAuthStateChange(async (event, session) => {
       if (window.location.hash && window.location.hash.includes('access_token')) {
         window.history.replaceState(null, '', window.location.pathname);
       }
+      // Also clean PKCE code from query string
+      if (window.location.search && window.location.search.includes('code=')) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
       const authModal = document.getElementById('modal-auth');
       if (authModal?.classList.contains('open')) closeModal('auth');
 
@@ -2647,8 +2672,22 @@ sb.auth.onAuthStateChange(async (event, session) => {
 // INIT — handle OAuth redirect token
 // ═══════════════════════════════════
 (async () => {
-  // Handle OAuth callback — Supabase puts tokens in the URL hash
-  // getSession() automatically picks this up from the hash
+  // Handle OAuth callback — Supabase may put tokens in the URL hash (implicit)
+  // or use PKCE with ?code= query param. detectSessionInUrl handles both.
+  const isOAuthCallback = window.location.hash?.includes('access_token')
+    || window.location.search?.includes('code=');
+
+  // If this is an OAuth callback, exchange the code/token first
+  if (isOAuthCallback) {
+    const { data: { session: oauthSession }, error: oauthError } = await sb.auth.exchangeCodeForSession(
+      window.location.href
+    ).catch(() => ({ data: { session: null }, error: null }));
+
+    // Clean URL params after OAuth redirect
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState(null, '', cleanUrl);
+  }
+
   const { data: { session }, error } = await sb.auth.getSession();
 
   if (session) {
