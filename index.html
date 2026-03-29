@@ -49,7 +49,7 @@ nav ul a{text-decoration:none;color:var(--muted2);font-size:14px;font-weight:500
 nav ul a:hover{color:var(--ink)}
 .nav-cta{background:var(--grad)!important;color:white!important;padding:8px 18px!important;border-radius:8px!important;font-weight:600!important;font-size:13px!important}
 .nav-right{display:flex;align-items:center;gap:12px}
-.nav-avatar{width:36px;height:36px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:white;cursor:pointer;transition:transform .15s}
+.nav-avatar{width:36px;height:36px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:white;cursor:pointer;transition:transform .15s;overflow:hidden}
 .nav-avatar:hover{transform:scale(1.08)}
 .nav-username{font-size:13px;color:var(--muted2);font-family:'Space Mono',monospace}
 .nav-signout{font-size:12px;color:var(--muted);cursor:pointer;padding:6px 12px;border:1px solid var(--border);border-radius:6px;transition:all .15s;background:none}
@@ -159,7 +159,7 @@ nav ul a:hover{color:var(--ink)}
 .card-foot{display:flex;align-items:center;justify-content:space-between;padding-top:12px;border-top:1px solid var(--border)}
 .reviewer{display:flex;align-items:center;gap:9px;cursor:pointer}
 .reviewer:hover .rev-name{color:var(--blue-light)}
-.avi{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;flex-shrink:0}
+.avi{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;flex-shrink:0;overflow:hidden}
 .rev-name{font-size:13px;font-weight:600;transition:color .15s}
 .rev-date{font-size:11px;color:var(--muted)}
 .rev-badge{color:var(--orange-light);font-size:9px;font-family:'Space Mono',monospace}
@@ -241,7 +241,7 @@ nav ul a:hover{color:var(--ink)}
 .profile-header{background:var(--bg2);border-bottom:1px solid var(--border);padding:84px 32px 0;position:relative;overflow:hidden}
 .profile-inner{max-width:1000px;margin:0 auto;position:relative}
 .profile-top{display:flex;align-items:flex-end;gap:22px;padding-bottom:28px;flex-wrap:wrap}
-.profile-avi-big{width:88px;height:88px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:36px;font-weight:800;color:white;flex-shrink:0;box-shadow:0 0 0 3px rgba(30,127,212,.3)}
+.profile-avi-big{width:88px;height:88px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:36px;font-weight:800;color:white;flex-shrink:0;box-shadow:0 0 0 3px rgba(30,127,212,.3);overflow:hidden}
 .profile-name{font-family:'Barlow Condensed',sans-serif;color:var(--ink);font-size:40px;font-weight:800;text-transform:uppercase;letter-spacing:-1px;margin-bottom:4px}
 .profile-handle{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:10px}
 .profile-bio{font-size:14px;color:var(--muted2);max-width:460px;line-height:1.6}
@@ -1445,7 +1445,11 @@ function updateNavUI(user) {
   if (user) {
     const name = currentProfile?.display_name || user.email.split('@')[0];
     const initials = getAvatarInitials(name);
-    avatar.textContent = initials;
+    if (currentProfile?.avatar_url) {
+      avatar.innerHTML = `<img src="${currentProfile.avatar_url}" alt="${name}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+    } else {
+      avatar.textContent = initials;
+    }
     username.textContent = currentProfile?.username ? '@' + currentProfile.username : name;
     // Show logged-in elements
     avatar.classList.remove('hidden');
@@ -1642,7 +1646,7 @@ async function loadReviews(order = 'recent') {
   const el = document.getElementById('reviews-feed');
   if (!el) return; // element doesn't exist on this page
   el.innerHTML = '<div class="loading-cards"><span class="spinner"></span> Loading reviews...</div>';
-  let query = sb.from('reviews').select('*, profiles(display_name, username, scout_level)');
+  let query = sb.from('reviews').select('*, profiles(display_name, username, scout_level, avatar_url)');
   if (order === 'top') query = query.order('total_score', { ascending: false });
   else query = query.order('created_at', { ascending: false });
   query = query.limit(20);
@@ -1659,6 +1663,7 @@ function buildReviewCard(r, i) {
   const isAnonymous = r.is_anonymous;
   const name = isAnonymous ? 'Anonymous' : (r.profiles?.display_name || r.profiles?.username || 'venn-U Scout');
   const initials = isAnonymous ? '?' : getAvatarInitials(name);
+  const avatarUrl = !isAnonymous ? r.profiles?.avatar_url : null;
   const date = new Date(r.created_at).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'});
   const level = isAnonymous ? '' : (r.profiles?.scout_level || 'Rookie Scout');
   const isAdminReview = r.user_id === ADMIN_ID;
@@ -1689,7 +1694,7 @@ function buildReviewCard(r, i) {
     ${photosHtml}
     <div class="card-foot">
       <div class="reviewer">
-        <div class="avi" style="background:var(--grad)">${initials}</div>
+        <div class="avi" style="${avatarUrl ? '' : 'background:var(--grad)'}">${avatarUrl ? `<img src="${avatarUrl}" alt="${name}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">` : initials}</div>
         <div><div class="rev-name">${!isAnonymous && r.user_id ? `<span style="cursor:pointer" onclick="viewUserProfile('${r.user_id}')">${name}</span>` : name}${level ? ` <span class="rev-badge">★ ${level}</span>` : ''}</div><div class="rev-date">${date}</div></div>
       </div>
       <div class="card-actions">
@@ -1708,7 +1713,7 @@ async function loadVenueDetail(venueId, venueName) {
   currentVenueId = venueId;
   showPage('venue');
   document.getElementById('venue-141-bar').style.display = '';  // restore bar hidden during browse
-  // Always hide official review display upfront — loadAdminSpotlight will show it only for admins
+  // Hide official review display upfront — loadAdminSpotlight will show it when content exists
   const _displayEl = document.getElementById('admin-scoresheet-display');
   if (_displayEl) { _displayEl.style.display = 'none'; _displayEl.innerHTML = ''; }
   document.getElementById('venue-detail-name').textContent = venueName || 'Loading...';
@@ -1720,7 +1725,7 @@ async function loadVenueDetail(venueId, venueName) {
   ] = await Promise.all([
     sb.from('venues').select('*').eq('id', venueId).single(),
     sb.from('reviews')
-      .select('*, profiles(display_name, username, scout_level)')
+      .select('*, profiles(display_name, username, scout_level, avatar_url)')
       .eq('venue_id', venueId)
       .eq('is_hidden', false)
       .order('is_pinned', { ascending: false })
@@ -2044,7 +2049,7 @@ function searchScouts(query) {
   _scoutSearchTimeout = setTimeout(async () => {
     const q = query.trim().replace(/^@/, '');
     const { data, error } = await sb.from('profiles')
-      .select('id,display_name,username,scout_level')
+      .select('id,display_name,username,scout_level,avatar_url')
       .or(`display_name.ilike.%${q}%,username.ilike.%${q}%`)
       .limit(8);
     if (error || !data?.length) {
@@ -2056,7 +2061,7 @@ function searchScouts(query) {
       const handle = u.username ? `@${u.username}` : '';
       const isSelf = currentUser && u.id === currentUser.id;
       return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="viewUserProfile('${u.id}')">
-        <div style="width:36px;height:36px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;font-weight:700;color:white;flex-shrink:0">${name.charAt(0).toUpperCase()}</div>
+        <div style="width:36px;height:36px;border-radius:50%;${u.avatar_url ? '' : 'background:var(--grad);'}display:flex;align-items:center;justify-content:center;font-weight:700;color:white;flex-shrink:0;overflow:hidden">${u.avatar_url ? `<img src="${u.avatar_url}" alt="${name}" style="width:100%;height:100%;object-fit:cover">` : name.charAt(0).toUpperCase()}</div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:14px;color:var(--ink)">${name}</div>
           ${handle ? `<div style="font-size:12px;color:var(--muted)">${handle}</div>` : ''}
@@ -2118,7 +2123,7 @@ async function viewUserProfile(userId) {
     { count: followers },
     { count: following }
   ] = await Promise.all([
-    sb.from('profiles').select('id,display_name,username,bio,scout_level').eq('id', userId).single(),
+    sb.from('profiles').select('id,display_name,username,bio,scout_level,avatar_url').eq('id', userId).single(),
     sb.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId),
     sb.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
     sb.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
@@ -2134,7 +2139,7 @@ async function viewUserProfile(userId) {
   document.getElementById('upm-title').textContent = name;
   document.getElementById('upm-body').innerHTML = `
     <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
-      <div style="width:60px;height:60px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:white;flex-shrink:0">${name.charAt(0).toUpperCase()}</div>
+      <div style="width:60px;height:60px;border-radius:50%;${profile.avatar_url ? '' : 'background:var(--grad);'}display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:white;flex-shrink:0;overflow:hidden">${profile.avatar_url ? `<img src="${profile.avatar_url}" alt="${name}" style="width:100%;height:100%;object-fit:cover">` : name.charAt(0).toUpperCase()}</div>
       <div style="flex:1">
         <div style="font-size:18px;font-weight:700;color:var(--ink)">${name}</div>
         ${handle ? `<div style="font-size:13px;color:var(--muted)">${handle}</div>` : ''}
@@ -2326,7 +2331,11 @@ async function loadProfile() {
   document.getElementById('profile-display-name').textContent = name;
   document.getElementById('profile-handle').textContent = profile?.username ? '@' + profile.username : currentUser.email;
   document.getElementById('profile-bio').textContent = profile?.bio || 'No bio yet. Edit your profile to add one!';
-  document.getElementById('profile-avi-big').textContent = getAvatarInitials(name);
+  if (profile?.avatar_url) {
+    document.getElementById('profile-avi-big').innerHTML = `<img src="${profile.avatar_url}" alt="${name}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+  } else {
+    document.getElementById('profile-avi-big').textContent = getAvatarInitials(name);
+  }
   document.getElementById('edit-display-name').value = profile?.display_name || '';
   document.getElementById('edit-username').value = profile?.username || '';
   document.getElementById('edit-bio').value = profile?.bio || '';
@@ -2540,9 +2549,9 @@ async function loadAdminSpotlight(venueId) {
 
   const d = venue?.admin_scoresheet;
 
-  // Populate editor for admin
+  // Populate editor for admin only; explicitly hide for non-admins
+  const editorEl = document.getElementById('admin-scoresheet-editor');
   if (isAdmin()) {
-    const editorEl = document.getElementById('admin-scoresheet-editor');
     if (editorEl) editorEl.style.display = 'block';
     if (d?.total_score != null) {
       const scoreInput = document.getElementById('admin-manual-score');
@@ -2576,13 +2585,15 @@ async function loadAdminSpotlight(venueId) {
       d.food_items.forEach(f => foodItems.push(f));
       renderFoodItems();
     }
+  } else {
+    // Explicitly hide editor for non-admin users
+    if (editorEl) editorEl.style.display = 'none';
   }
 
-  // Public display
+  // Public display — visible to all users when there's official content
   const displayEl = document.getElementById('admin-scoresheet-display');
   if (displayEl) {
-    // Only admins see the official review display
-    if (isAdmin() && (d?.total_score != null || d?.written_review || d?.video_url)) {
+    if (d?.total_score != null || d?.written_review || d?.video_url) {
       displayEl.style.display = 'block';
       displayEl.innerHTML = renderScoresheetDisplay(d);
     } else {
