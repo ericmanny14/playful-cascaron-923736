@@ -777,11 +777,11 @@ nav ul a:hover{color:var(--ink)}
           <div class="admin-field">
             <label>Written Review <span style="color:var(--muted);font-size:12px">(optional)</span></label>
             <div class="rich-editor"><div class="rich-toolbar">
-              <button class="rich-btn" onclick="fmt('bold')"><b>B</b></button>
-              <button class="rich-btn" onclick="fmt('italic')"><i>I</i></button>
-              <button class="rich-btn" onclick="fmt('underline')"><u>U</u></button>
-              <button class="rich-btn" onclick="fmt('insertUnorderedList')">• List</button>
-              <button class="rich-btn" onclick="fmt('removeFormat')">Clear</button>
+              <button class="rich-btn" onclick="fmt('bold','admin-written-review')"><b>B</b></button>
+              <button class="rich-btn" onclick="fmt('italic','admin-written-review')"><i>I</i></button>
+              <button class="rich-btn" onclick="fmt('underline','admin-written-review')"><u>U</u></button>
+              <button class="rich-btn" onclick="fmt('insertUnorderedList','admin-written-review')">• List</button>
+              <button class="rich-btn" onclick="fmt('removeFormat','admin-written-review')">Clear</button>
             </div>
             <div class="rich-body" id="admin-written-review" contenteditable="true" placeholder="Share your official take on this venue…"></div>
             </div>
@@ -1550,6 +1550,8 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
     review_text: reviewText || null,
     photo_urls: [],
     is_anonymous: isAnonymous || false,
+    is_hidden: false,
+    is_pinned: false,
   }).select('id').single();
 
   if (re) { showToast('Error saving review: ' + re.message, 'error'); return false; }
@@ -1557,7 +1559,8 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
   // Upload photos if any and update review
   const photoUrls = await uploadPhotos(prefix === 'qs' ? 'qs-photo-input' : 'm-photo-input', review.id);
   if (photoUrls.length > 0) {
-    await sb.from('reviews').update({ photo_urls: photoUrls }).eq('id', review.id);
+    const { error: photoErr } = await sb.from('reviews').update({ photo_urls: photoUrls }).eq('id', review.id);
+    if (photoErr) console.error('Failed to save photo URLs:', photoErr.message);
   }
 
   // Add passport stamp
@@ -1722,7 +1725,7 @@ async function loadVenueDetail(venueId, venueName) {
     sb.from('reviews')
       .select('*, profiles(display_name, username, scout_level)')
       .eq('venue_id', venueId)
-      .eq('is_hidden', false)
+      .or('is_hidden.eq.false,is_hidden.is.null')
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
   ]);
@@ -2581,8 +2584,8 @@ async function loadAdminSpotlight(venueId) {
   // Public display
   const displayEl = document.getElementById('admin-scoresheet-display');
   if (displayEl) {
-    // Only admins see the official review display
-    if (isAdmin() && (d?.total_score != null || d?.written_review || d?.video_url)) {
+    // Show official review display to everyone when data is present
+    if (d?.total_score != null || d?.written_review || d?.video_url) {
       displayEl.style.display = 'block';
       displayEl.innerHTML = renderScoresheetDisplay(d);
     } else {
@@ -3027,7 +3030,6 @@ async function admTogglePin(id, pin, btn) {
   await sb.from('reviews').update({ is_pinned: pin }).eq('id', id);
   showToast(pin ? '📌 Review pinned!' : 'Review unpinned');
   btn.textContent = pin ? '📌 Unpin' : '📌 Pin to Top';
-  btn.closest('.review-card').querySelector('[class*="review-card"] div').innerHTML;
   admLoadReviews('all');
 }
 
@@ -3137,8 +3139,9 @@ function previewAdminPhotos(input) {
 }
 
 // ── RICH TEXT EDITOR ──
-function fmt(cmd) {
-  document.getElementById('adv-review-body').focus();
+function fmt(cmd, targetId) {
+  var el = document.getElementById(targetId || 'adv-review-body');
+  if (el) el.focus();
   document.execCommand(cmd, false, null);
 }
 
