@@ -1535,7 +1535,10 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
     _venueCache = null; // bust browse cache so new venue appears
   }
 
-  // Insert review first to get ID for photo upload
+  // Upload photos first (using a temp ID for storage path), then insert review with URLs
+  const tempPhotoId = crypto.randomUUID();
+  const photoUrls = await uploadPhotos(prefix === 'qs' ? 'qs-photo-input' : 'm-photo-input', tempPhotoId);
+
   const { data: review, error: re } = await sb.from('reviews').insert({
     user_id: currentUser.id,
     venue_id: venueId,
@@ -1548,17 +1551,11 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
     score_security: scores[4],
     score_postgame: scores[5],
     review_text: reviewText || null,
-    photo_urls: [],
+    photo_urls: photoUrls,
     is_anonymous: isAnonymous || false,
   }).select('id').single();
 
   if (re) { showToast('Error saving review: ' + re.message, 'error'); return false; }
-
-  // Upload photos if any and update review
-  const photoUrls = await uploadPhotos(prefix === 'qs' ? 'qs-photo-input' : 'm-photo-input', review.id);
-  if (photoUrls.length > 0) {
-    await sb.from('reviews').update({ photo_urls: photoUrls }).eq('id', review.id);
-  }
 
   // Add passport stamp
   await sb.from('passport_stamps').upsert({
@@ -1969,7 +1966,7 @@ async function admDeleteVenue(venueId, venueName) {
   const { error: revDelErr } = await sb.from('reviews').delete().eq('venue_id', venueId);
   if (revDelErr) {
     // Fall back to hiding reviews
-    await sb.from('reviews').update({ is_hidden: true }).eq('venue_id', venueId);
+    await safeUpdateReviewsBulk({ venue_id: venueId }, { is_hidden: true });
   }
 
   // Delete the venue
@@ -2218,16 +2215,47 @@ async function updateReview(reviewId) {
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Updating...';
 
   const scores = getReactionScores('m');
-  if (scores.some(s => s === undefined)) { 
-    showToast('Please react to all 6 categories', 'error'); 
+  if (scores.some(s => s === undefined)) {
+    showToast('Please react to all 6 categories', 'error');
     btn.disabled = false; btn.textContent = 'Update Review';
-    return; 
+    return;
   }
 
   const isAnonymous = document.getElementById('m-anonymous').checked;
   const reviewText = document.getElementById('m-review-text').value.trim();
 
-  const { error } = await sb.from('reviews').update({
+  // Fetch existing review to preserve metadata (needed for delete+insert workaround)
+  const { data: existing, error: fetchErr } = await sb.from('reviews')
+    .select('*')
+    .eq('id', reviewId)
+    .eq('user_id', currentUser.id)
+    .single();
+
+  if (fetchErr || !existing) {
+    showToast('Error updating review: ' + (fetchErr?.message || 'Review not found'), 'error');
+    btn.disabled = false; btn.textContent = 'Update Review';
+    return;
+  }
+
+  // Use delete + insert instead of update to avoid conflict with
+  // the generated total_score column and its database trigger
+  const { error: deleteErr } = await sb.from('reviews')
+    .delete()
+    .eq('id', reviewId)
+    .eq('user_id', currentUser.id);
+
+  if (deleteErr) {
+    showToast('Error updating review: ' + deleteErr.message, 'error');
+    btn.disabled = false; btn.textContent = 'Update Review';
+    return;
+  }
+
+  const { error: insertErr } = await sb.from('reviews').insert({
+    id: existing.id,
+    user_id: existing.user_id,
+    venue_id: existing.venue_id,
+    venue_name: existing.venue_name,
+    section: existing.section,
     score_pregame:    scores[0],
     score_atmosphere: scores[1],
     score_comfort:    scores[2],
@@ -2235,13 +2263,20 @@ async function updateReview(reviewId) {
     score_security:   scores[4],
     score_postgame:   scores[5],
     review_text: reviewText || null,
-    is_anonymous: isAnonymous
-  }).eq('id', reviewId).eq('user_id', currentUser.id);
+    is_anonymous: isAnonymous,
+    photo_urls: existing.photo_urls,
+    likes: existing.likes || 0,
+    is_pinned: existing.is_pinned || false,
+    is_hidden: existing.is_hidden || false,
+    created_at: existing.created_at,
+  });
 
   btn.disabled = false; btn.textContent = 'Update Review';
 
-  if (error) {
-    showToast('Error updating review: ' + error.message, 'error');
+  if (insertErr) {
+    // Attempt to restore the original review if insert fails
+    await sb.from('reviews').insert(existing);
+    showToast('Error updating review: ' + insertErr.message, 'error');
     return;
   }
 
@@ -2417,16 +2452,55 @@ async function saveProfile() {
 }
 
 // ═══════════════════════════════════
+// SAFE REVIEW UPDATE (avoids trigger on generated total_score column)
+// ═══════════════════════════════════
+async function safeUpdateReview(id, updates, extraFilter) {
+  const q = sb.from('reviews').select('*').eq('id', id);
+  if (extraFilter) extraFilter(q);
+  const { data: existing, error: fetchErr } = await q.single();
+  if (fetchErr || !existing) return { error: fetchErr || { message: 'Review not found' } };
+
+  const delQ = sb.from('reviews').delete().eq('id', id);
+  if (extraFilter) extraFilter(delQ);
+  const { error: delErr } = await delQ;
+  if (delErr) return { error: delErr };
+
+  const merged = { ...existing, ...updates };
+  delete merged.total_score;
+  const { error: insErr } = await sb.from('reviews').insert(merged);
+  if (insErr) {
+    const rollback = { ...existing };
+    delete rollback.total_score;
+    await sb.from('reviews').insert(rollback);
+    return { error: insErr };
+  }
+  return { error: null };
+}
+
+async function safeUpdateReviewsBulk(filter, updates) {
+  const { data: rows, error: fetchErr } = await sb.from('reviews').select('*').match(filter);
+  if (fetchErr || !rows?.length) return { error: fetchErr };
+  for (const row of rows) {
+    const { error: delErr } = await sb.from('reviews').delete().eq('id', row.id);
+    if (delErr) continue;
+    const merged = { ...row, ...updates };
+    delete merged.total_score;
+    await sb.from('reviews').insert(merged);
+  }
+  return { error: null };
+}
+
+// ═══════════════════════════════════
 // LIKE
 // ═══════════════════════════════════
 async function likeReview(btn, reviewId) {
   const n = parseInt(btn.textContent.split(' ')[1]) || 0;
   if (btn.dataset.liked) {
     btn.textContent = '♡ ' + (n-1); btn.style.color = ''; btn.dataset.liked = '';
-    await sb.from('reviews').update({ likes: n-1 }).eq('id', reviewId);
+    await safeUpdateReview(reviewId, { likes: n-1 });
   } else {
     btn.textContent = '♥ ' + (n+1); btn.style.color = 'var(--blue-light)'; btn.dataset.liked = '1';
-    await sb.from('reviews').update({ likes: n+1 }).eq('id', reviewId);
+    await safeUpdateReview(reviewId, { likes: n+1 });
   }
 }
 
@@ -3024,7 +3098,7 @@ async function admLoadReviews(filter, btn) {
 }
 
 async function admTogglePin(id, pin, btn) {
-  await sb.from('reviews').update({ is_pinned: pin }).eq('id', id);
+  await safeUpdateReview(id, { is_pinned: pin });
   showToast(pin ? '📌 Review pinned!' : 'Review unpinned');
   btn.textContent = pin ? '📌 Unpin' : '📌 Pin to Top';
   btn.closest('.review-card').querySelector('[class*="review-card"] div').innerHTML;
@@ -3032,7 +3106,7 @@ async function admTogglePin(id, pin, btn) {
 }
 
 async function admToggleHide(id, hide, btn) {
-  await sb.from('reviews').update({ is_hidden: hide }).eq('id', id);
+  await safeUpdateReview(id, { is_hidden: hide });
   showToast(hide ? '🙈 Review hidden from feed' : '👁 Review visible again');
   admLoadReviews('all');
 }
@@ -3050,7 +3124,7 @@ async function admDeleteReview(id, btn) {
 
   if (delErr) {
     // Hard delete blocked (RLS) — fall back to hiding the review
-    const { error: hideErr } = await sb.from('reviews').update({ is_hidden: true }).eq('id', id);
+    const { error: hideErr } = await safeUpdateReview(id, { is_hidden: true });
     if (hideErr) { showToast('Error: ' + hideErr.message, 'error'); return; }
     showToast('Review hidden (add admin DELETE policy in Supabase to permanently delete)');
   } else {
@@ -3058,7 +3132,7 @@ async function admDeleteReview(id, btn) {
     const { data: check } = await sb.from('reviews').select('id').eq('id', id).maybeSingle();
     if (check) {
       // Still exists — RLS silently blocked. Fall back to hide.
-      const { error: hideErr } = await sb.from('reviews').update({ is_hidden: true }).eq('id', id);
+      const { error: hideErr } = await safeUpdateReview(id, { is_hidden: true });
       if (hideErr) { showToast('Error: ' + hideErr.message, 'error'); return; }
       showToast('Review hidden (add admin DELETE policy in Supabase to permanently delete)');
     } else {
