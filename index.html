@@ -1195,7 +1195,7 @@ nav ul a:hover{color:var(--ink)}
           <label>📄 Venue PDFs (guides, maps, menus)</label>
           <div class="admin-pdf-list" id="adv-pdfs-list"></div>
           <label class="admin-upload-btn" for="adv-pdfs-input">+ Add PDFs</label>
-          <input type="file" id="adv-pdfs-input" accept="application/pdf" multiple style="display:none" onchange="previewAdminPdfs(this)">
+          <input type="file" id="adv-pdfs-input" accept="application/pdf,.pdf" multiple style="display:none" onchange="previewAdminPdfs(this)">
         </div>
 
         <div style="margin-bottom:20px">
@@ -1292,6 +1292,25 @@ const VENUE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 // ═══════════════════════════════════
 // Escape a string for safe use inside inline onclick single-quoted attributes
 function esc(s) { return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
+function imgRetry(img) {
+  if (!img.dataset.retried) {
+    img.dataset.retried = '1';
+    var src = img.src;
+    img.src = '';
+    setTimeout(function() { img.src = src + (src.includes('?') ? '&' : '?') + 'retry=1'; }, 500);
+  } else {
+    img.alt = '📷 Photo';
+    img.style.background = 'var(--bg3)';
+    img.style.display = 'flex';
+    img.style.alignItems = 'center';
+    img.style.justifyContent = 'center';
+    img.style.fontSize = '28px';
+    img.style.color = 'var(--muted)';
+    img.removeAttribute('src');
+    img.outerHTML = '<div style="width:' + (img.width || 180) + 'px;height:' + (img.height || 180) + 'px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--muted);cursor:pointer" onclick="openLightbox(\'' + (img.dataset.originalUrl || '') + '\')">📷</div>';
+  }
+}
 
 function showPage(name) {
   const target = document.getElementById('page-' + name);
@@ -1714,7 +1733,7 @@ function buildReviewCard(r, i) {
   // Photo gallery HTML
   const photosHtml = (r.photo_urls?.length > 0)
     ? `<div class="review-photos">${r.photo_urls.filter(Boolean).map(url =>
-        `<img class="review-photo" src="${url}" alt="Review photo" onerror="this.style.display='none'" onclick="openLightbox('${esc(url)}')">`
+        `<img class="review-photo" src="${url}" alt="Review photo" data-original-url="${esc(url)}" onerror="imgRetry(this)" onclick="openLightbox('${esc(url)}')">`
       ).join('')}</div>`
     : '';
   return `<div class="${cardClass}" style="animation-delay:${i * 0.07}s">
@@ -1858,13 +1877,7 @@ async function loadVenueDetail(venueId, venueName) {
     if (communityPhotos.length) {
       cpCard.style.display = 'block';
       cpGrid.innerHTML = communityPhotos.map(url =>
-        `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer" onerror="this.style.display='none'" onclick="openLightbox('${esc(url)}')">`
-      ).join('');
-    } else {
-      cpCard.style.display = 'none';
-      cpGrid.innerHTML = '';
-    }
-  }
+        `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer" data-original-url="${esc(url)}" onerror="imgRetry(this)" onclick="openLightbox('${esc(url)}')">`
 
   // Load admin spotlight
   loadAdminSpotlight(venueId);
@@ -2052,7 +2065,7 @@ function populateVenueSidebar(photos, foodItems) {
     if (validPhotos.length) {
       photosCard.style.display = 'block';
       photoGrid.innerHTML = validPhotos.map(url =>
-        `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer" onerror="this.style.display='none'" onclick="openLightbox('${esc(url)}')">`
+        `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer" data-original-url="${esc(url)}" onerror="imgRetry(this)" onclick="openLightbox('${esc(url)}')">`
       ).join('');
     } else {
       photosCard.style.display = 'none';
@@ -2256,7 +2269,8 @@ async function editReview(reviewId) {
   Object.entries(reactions).forEach(([key, score]) => {
     const btns = document.querySelectorAll(`[onclick*="selectReaction"][onclick*="${key}"]`);
     btns.forEach(btn => {
-      const btnScore = parseInt(btn.onclick.toString().match(/,(\d+)\)/)[1]);
+      const m = btn.onclick?.toString().match(/,(\d+)\)/);
+      const btnScore = m ? parseInt(m[1]) : null;
       if (btnScore === score) {
         selectReaction(btn, key, score);
       }
@@ -2285,6 +2299,7 @@ async function updateReview(reviewId) {
   const isAnonymous = document.getElementById('m-anonymous').checked;
   const reviewText = document.getElementById('m-review-text').value.trim();
 
+  const totalScore = scores.reduce((a, b) => a + b, 0) / 6;
   const { error } = await sb.from('reviews').update({
     score_pregame:    scores[0],
     score_atmosphere: scores[1],
@@ -2292,6 +2307,7 @@ async function updateReview(reviewId) {
     score_amenities:  scores[3],
     score_security:   scores[4],
     score_postgame:   scores[5],
+    total_score:      totalScore,
     review_text: reviewText || null,
     is_anonymous: isAnonymous
   }).eq('id', reviewId).eq('user_id', currentUser.id);
@@ -2745,16 +2761,16 @@ async function venueSearch(input, dropdownId, hiddenId, detailsId) {
     const { data } = await sb.from('venues').select('id,name,city,state,sport,team')
       .ilike('name', `%${q}%`).limit(8);
     if (!data?.length) {
-      dropdown.innerHTML = `<div class="venue-add-new" onclick="selectNewVenue('${q}','${dropdownId}','${hiddenId}','${detailsId}')">➕ Add "${q}" as new venue</div>`;
+      dropdown.innerHTML = `<div class="venue-add-new" onclick="selectNewVenue('${esc(q)}','${dropdownId}','${hiddenId}','${detailsId}')">➕ Add "${esc(q)}" as new venue</div>`;
     } else {
       dropdown.innerHTML = data.map(v => `
-        <div class="venue-option" onclick="selectVenue('${v.id}','${v.name}','${v.city||''}','${v.state||''}','${v.sport||''}','${v.team||''}','${dropdownId}','${hiddenId}','${detailsId}','${input.id}')">
+        <div class="venue-option" onclick="selectVenue('${v.id}','${esc(v.name)}','${esc(v.city||'')}','${esc(v.state||'')}','${esc(v.sport||'')}','${esc(v.team||'')}','${dropdownId}','${hiddenId}','${detailsId}','${input.id}')">
           <div>
             <div style="font-weight:600">${v.name}</div>
             <div class="venue-option-meta">${[v.city,v.state].filter(Boolean).join(', ')} ${v.sport ? '· '+v.sport : ''} ${v.team ? '/ '+v.team : ''}</div>
           </div>
         </div>`).join('') +
-        `<div class="venue-add-new" onclick="selectNewVenue('${q}','${dropdownId}','${hiddenId}','${detailsId}')">➕ Add "${q}" as new venue</div>`;
+        `<div class="venue-add-new" onclick="selectNewVenue('${esc(q)}','${dropdownId}','${hiddenId}','${detailsId}')">➕ Add "${esc(q)}" as new venue</div>`;
     }
     dropdown.style.display = 'block';
     venueDropdownHighlight = -1;
@@ -2925,7 +2941,7 @@ async function admEditVenue(venueId) {
   // Photos grid
   const pg = document.getElementById('adv-photos-grid');
   pg.innerHTML = (v.photo_urls || []).map(url =>
-    `<div class="admin-photo-item"><img src="${url}"><div class="admin-photo-remove" onclick="removeAdminPhoto(this,'${url}','${v.id}')">✕</div></div>`
+    `<div class="admin-photo-item"><img src="${url}"><div class="admin-photo-remove" onclick="removeAdminPhoto(this,'${esc(url)}','${v.id}')">✕</div></div>`
   ).join('');
   // PDFs list
   const pdfList = document.getElementById('adv-pdfs-list');
@@ -3048,12 +3064,16 @@ async function saveAdminVenue() {
   if (pdfInput?.files?.length) {
     const pdfEntries = [];
     for (const file of Array.from(pdfInput.files)) {
-      if (file.type !== 'application/pdf') continue;
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      if (!isPdf) continue;
       const path = `venues/${venueId}/pdfs/${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
       const { error: pdfErr } = await sb.storage.from('review-photos').upload(path, file, { upsert: true });
-      if (!pdfErr) {
+      if (pdfErr) {
+        console.error('PDF upload error:', pdfErr.message);
+        showToast('⚠️ PDF upload failed: ' + (pdfErr.message || 'Unknown error'), 'error');
+      } else {
         const { data: pd } = sb.storage.from('review-photos').getPublicUrl(path);
-        pdfEntries.push({ name: file.name.replace('.pdf', ''), url: pd.publicUrl });
+        pdfEntries.push({ name: file.name.replace(/\.pdf$/i, ''), url: pd.publicUrl });
       }
     }
     if (pdfEntries.length) {
