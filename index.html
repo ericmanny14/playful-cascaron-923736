@@ -338,18 +338,29 @@ nav ul a:hover{color:var(--ink)}
 .photo-remove{position:absolute;top:-5px;right:-5px;width:18px;height:18px;background:var(--dislike);border-radius:50%;border:none;cursor:pointer;color:white;font-size:10px;display:flex;align-items:center;justify-content:center;line-height:1}
 /* ── REVIEW PHOTOS ── */
 .review-photos{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.review-photo{width:80px;height:80px;border-radius:6px;object-fit:cover;border:1px solid var(--border);cursor:pointer;transition:transform .15s}
-.review-photo:hover{transform:scale(1.05)}
+.review-photo{width:180px;height:180px;border-radius:8px;object-fit:cover;border:1px solid var(--border);cursor:pointer;transition:transform .15s}
+.review-photo:hover{transform:scale(1.03);box-shadow:0 4px 16px rgba(0,0,0,.4)}
 /* ── PHOTO LIGHTBOX ── */
-.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99999;align-items:center;justify-content:center;cursor:pointer}
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99999;align-items:center;justify-content:center;cursor:pointer;flex-direction:column;gap:12px}
 .lightbox.open{display:flex}
-.lightbox img{max-width:90vw;max-height:90vh;border-radius:10px;object-fit:contain}
+.lightbox img{max-width:90vw;max-height:85vh;border-radius:10px;object-fit:contain;cursor:default}
+.lightbox-hint{color:rgba(255,255,255,.5);font-size:13px;font-family:'Space Mono',monospace;letter-spacing:1px}
+.venue-pdfs{display:flex;flex-wrap:wrap;gap:10px;padding:16px 20px;border-bottom:1px solid var(--border)}
+.venue-pdf-link{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px;font-weight:500;transition:all .15s;cursor:pointer}
+.venue-pdf-link:hover{border-color:var(--blue);color:var(--blue-light);background:rgba(30,127,212,.06)}
+.venue-pdf-link .pdf-icon{font-size:20px}
+.admin-pdf-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.admin-pdf-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:13px}
+.admin-pdf-item .pdf-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.admin-pdf-remove{color:var(--dislike);cursor:pointer;font-size:12px;padding:2px 6px;border-radius:4px;transition:background .15s}
+.admin-pdf-remove:hover{background:rgba(239,68,68,.15)}
 /* ── ADMIN PANEL ── */
 .admin-panel{background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:16px;margin-bottom:14px}
 .admin-panel-title{font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:12px;display:flex;align-items:center;gap:6px}
 
 /* ── VENUE SEARCH AUTOCOMPLETE ── */
 .venue-search-wrap{position:relative}
+.modal-box .venue-search-wrap .venue-dropdown{position:relative;max-height:200px}
 .venue-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;z-index:9000;max-height:240px;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.4);margin-top:3px}
 .venue-option{padding:11px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);transition:background .15s;display:flex;justify-content:space-between;align-items:center}
 .venue-option:last-child{border-bottom:none}
@@ -501,6 +512,7 @@ nav ul a:hover{color:var(--ink)}
   nav ul{display:none}
   .profile-stats-row{gap:16px}
   .nav-username{display:none}
+  .review-photo{width:140px;height:140px}
 }
 </style>
 </head>
@@ -1084,7 +1096,8 @@ nav ul a:hover{color:var(--ink)}
 
 <!-- LIGHTBOX -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <img id="lightbox-img" src="" alt="">
+  <img id="lightbox-img" src="" alt="" onclick="event.stopPropagation()">
+  <div class="lightbox-hint">Click outside to close</div>
 </div>
 
 
@@ -1176,6 +1189,13 @@ nav ul a:hover{color:var(--ink)}
           <div class="admin-photo-grid" id="adv-photos-grid"></div>
           <label class="admin-upload-btn" for="adv-photos-input">+ Add Photos</label>
           <input type="file" id="adv-photos-input" accept="image/*" multiple style="display:none" onchange="previewAdminPhotos(this)">
+        </div>
+
+        <div class="admin-field">
+          <label>📄 Venue PDFs (guides, maps, menus)</label>
+          <div class="admin-pdf-list" id="adv-pdfs-list"></div>
+          <label class="admin-upload-btn" for="adv-pdfs-input">+ Add PDFs</label>
+          <input type="file" id="adv-pdfs-input" accept="application/pdf" multiple style="display:none" onchange="previewAdminPdfs(this)">
         </div>
 
         <div style="margin-bottom:20px">
@@ -1274,6 +1294,8 @@ function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   window.scrollTo(0, 0);
+  // Clear venue context when leaving the venue page so submit modal doesn't lock the venue field
+  if (name !== 'venue') currentVenueId = null;
   if (name === 'profile') loadProfile();
   if (name === 'home') loadHomeVenues();
   // Only load browse when there is no specific venue — loadVenueDetail sets currentVenueId before
@@ -1303,10 +1325,29 @@ function closeModal(name) {
     // Reset venue name fields (may have been pre-filled from venue page)
     const nameEl = document.getElementById('m-venue-name');
     const detailsEl = document.getElementById('m-venue-details');
+    const hiddenId = document.getElementById('m-venue-id');
     if (nameEl) { nameEl.value = ''; nameEl.readOnly = false; nameEl.style.opacity = ''; }
     if (detailsEl) { detailsEl.value = ''; detailsEl.readOnly = false; detailsEl.style.opacity = ''; }
+    if (hiddenId) hiddenId.value = '';
     const venueRow = nameEl?.closest('.form-row');
     if (venueRow) venueRow.style.display = '';
+    // Reset section and review text
+    const sectionEl = document.getElementById('m-section');
+    const reviewEl = document.getElementById('m-review-text');
+    if (sectionEl) sectionEl.value = '';
+    if (reviewEl) reviewEl.value = '';
+    // Reset reaction selections
+    document.querySelectorAll('#modal-submit .r-btn').forEach(b => b.classList.remove('selected'));
+    ['m-pregame','m-atmosphere','m-comfort','m-amenities','m-security','m-postgame'].forEach(k => delete reactions[k]);
+    const totalEl = document.getElementById('m-total');
+    const bdEl = document.getElementById('m-breakdown');
+    if (totalEl) totalEl.textContent = '–';
+    if (bdEl) bdEl.textContent = '0/6 categories selected';
+    // Clear photo previews
+    const photoPreview = document.getElementById('m-photo-previews');
+    if (photoPreview) photoPreview.innerHTML = '';
+    const photoInput = document.getElementById('m-photo-input');
+    if (photoInput) photoInput.value = '';
   }
 }
 document.querySelectorAll('.modal-bg').forEach(m => {
@@ -1708,7 +1749,7 @@ async function loadVenueDetail(venueId, venueName) {
   currentVenueId = venueId;
   showPage('venue');
   document.getElementById('venue-141-bar').style.display = '';  // restore bar hidden during browse
-  // Always hide official review display upfront — loadAdminSpotlight will show it only for admins
+  // Hide official review display upfront — loadAdminSpotlight will show it when available
   const _displayEl = document.getElementById('admin-scoresheet-display');
   if (_displayEl) { _displayEl.style.display = 'none'; _displayEl.innerHTML = ''; }
   document.getElementById('venue-detail-name').textContent = venueName || 'Loading...';
@@ -2578,11 +2619,10 @@ async function loadAdminSpotlight(venueId) {
     }
   }
 
-  // Public display
+  // Public display — visible to all users
   const displayEl = document.getElementById('admin-scoresheet-display');
   if (displayEl) {
-    // Only admins see the official review display
-    if (isAdmin() && (d?.total_score != null || d?.written_review || d?.video_url)) {
+    if (d?.total_score != null || d?.written_review || d?.video_url) {
       displayEl.style.display = 'block';
       displayEl.innerHTML = renderScoresheetDisplay(d);
     } else {
@@ -2816,6 +2856,8 @@ function admShowNewVenueForm() {
   document.getElementById('adv-featured').checked = false;
   document.getElementById('adv-review-body').innerHTML = '';
   document.getElementById('adv-tags-wrap').querySelectorAll('.tag-pill').forEach(t=>t.remove());
+  document.getElementById('adv-photos-grid').innerHTML = '';
+  document.getElementById('adv-pdfs-list').innerHTML = '';
   document.getElementById('adm-venue-form').style.display = 'block';
   document.getElementById('adm-venue-form').scrollIntoView({ behavior: 'smooth' });
 }
@@ -2866,6 +2908,11 @@ async function admEditVenue(venueId) {
   pg.innerHTML = (v.photo_urls || []).map(url =>
     `<div class="admin-photo-item"><img src="${url}"><div class="admin-photo-remove" onclick="removeAdminPhoto(this,'${url}','${v.id}')">✕</div></div>`
   ).join('');
+  // PDFs list
+  const pdfList = document.getElementById('adv-pdfs-list');
+  pdfList.innerHTML = (sc?.pdf_urls || []).map(p =>
+    `<div class="admin-pdf-item"><span class="pdf-icon">📄</span><span class="pdf-name">${p.name || 'Document'}</span><span class="admin-pdf-remove" onclick="removeAdminPdf(this,'${p.url}','${v.id}')">✕</span></div>`
+  ).join('');
   document.getElementById('adm-venue-form').style.display = 'block';
   document.getElementById('adm-venue-form').scrollIntoView({ behavior: 'smooth' });
 }
@@ -2901,6 +2948,12 @@ async function saveAdminVenue() {
     if (cats.length > 0) officialScore = cats.reduce((a, b) => a + b, 0) / cats.length;
   }
   const hasScoreData = officialScore != null || catPre != null;
+  // Preserve existing PDF attachments from admin_scoresheet
+  let existingPdfUrls = [];
+  if (id) {
+    const { data: existVenue } = await sb.from('venues').select('admin_scoresheet').eq('id', id).single();
+    existingPdfUrls = existVenue?.admin_scoresheet?.pdf_urls || [];
+  }
   const scoresheetPayload = hasScoreData ? {
     total_score: officialScore,
     cat_pregame:    catPre,
@@ -2911,6 +2964,7 @@ async function saveAdminVenue() {
     cat_postgame:   catPost,
     written_review: document.getElementById('adv-review-body').innerHTML || null,
     video_url: embedUrl,
+    pdf_urls: existingPdfUrls,
   } : null;
 
   const reviewText = document.getElementById('adv-review-body').innerHTML || null;
@@ -2968,6 +3022,28 @@ async function saveAdminVenue() {
     const { data: existing } = await sb.from('venues').select('photo_urls').eq('id', venueId).single();
     const allUrls = [...(existing?.photo_urls || []), ...urls];
     await sb.from('venues').update({ photo_urls: allUrls }).eq('id', venueId);
+  }
+
+  // Upload PDFs if any
+  const pdfInput = document.getElementById('adv-pdfs-input');
+  if (pdfInput?.files?.length) {
+    const pdfEntries = [];
+    for (const file of Array.from(pdfInput.files)) {
+      if (file.type !== 'application/pdf') continue;
+      const path = `venues/${venueId}/pdfs/${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
+      const { error: pdfErr } = await sb.storage.from('review-photos').upload(path, file, { upsert: true });
+      if (!pdfErr) {
+        const { data: pd } = sb.storage.from('review-photos').getPublicUrl(path);
+        pdfEntries.push({ name: file.name.replace('.pdf', ''), url: pd.publicUrl });
+      }
+    }
+    if (pdfEntries.length) {
+      const { data: venueData } = await sb.from('venues').select('admin_scoresheet').eq('id', venueId).single();
+      const sc = venueData?.admin_scoresheet || scoresheetPayload || {};
+      sc.pdf_urls = [...(sc.pdf_urls || []), ...pdfEntries];
+      await sb.from('venues').update({ admin_scoresheet: sc }).eq('id', venueId);
+    }
+    pdfInput.value = '';
   }
 
   _venueCache = null; // bust browse cache
@@ -3136,6 +3212,32 @@ function previewAdminPhotos(input) {
   });
 }
 
+function previewAdminPdfs(input) {
+  const list = document.getElementById('adv-pdfs-list');
+  Array.from(input.files).forEach(file => {
+    if (file.type !== 'application/pdf') return;
+    const item = document.createElement('div');
+    item.className = 'admin-pdf-item';
+    item.dataset.newFile = 'true';
+    item.innerHTML = `<span class="pdf-icon">📄</span><span class="pdf-name">${file.name}</span><span class="admin-pdf-remove" onclick="this.parentElement.remove()">✕</span>`;
+    list.appendChild(item);
+  });
+}
+
+function removeAdminPdf(btn, url, venueId) {
+  if (!confirm('Remove this PDF?')) return;
+  // Remove from the admin_scoresheet pdf_urls
+  sb.from('venues').select('admin_scoresheet').eq('id', venueId).single().then(({ data: v }) => {
+    const sc = v?.admin_scoresheet || {};
+    const newPdfs = (sc.pdf_urls || []).filter(p => p.url !== url);
+    sc.pdf_urls = newPdfs;
+    sb.from('venues').update({ admin_scoresheet: sc }).eq('id', venueId).then(() => {
+      btn.closest('.admin-pdf-item').remove();
+      showToast('PDF removed');
+    });
+  });
+}
+
 // ── RICH TEXT EDITOR ──
 function fmt(cmd) {
   document.getElementById('adv-review-body').focus();
@@ -3289,6 +3391,11 @@ async function saveAdminScoresheet() {
   }
 
   const getC = id => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v) ? null : Math.min(5, Math.max(3, v)); };
+
+  // Preserve existing PDF attachments
+  const { data: existingVenue } = await sb.from('venues').select('admin_scoresheet').eq('id', currentVenueId).single();
+  const existingPdfs = existingVenue?.admin_scoresheet?.pdf_urls || [];
+
   const scoresheetData = {
     total_score: totalScore,
     cat_pregame:    getC('adm-cat-pregame'),
@@ -3302,6 +3409,7 @@ async function saveAdminScoresheet() {
     visit_date: document.getElementById('admin-visit-date')?.value || null,
     game_attended: document.getElementById('admin-game-attended')?.value.trim() || null,
     food_items: foodItems,
+    pdf_urls: existingPdfs,
   };
 
   const { error } = await sb.from('venues').update({
@@ -3366,6 +3474,12 @@ function renderScoresheetDisplay(data) {
       </div>
     </div>` : '';
 
+  const pdfHtml = data.pdf_urls?.length ? `
+    <div class="venue-pdfs">
+      <div style="width:100%;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">📄 Venue Documents</div>
+      ${data.pdf_urls.map(p => `<a class="venue-pdf-link" href="${p.url}" target="_blank" rel="noopener"><span class="pdf-icon">📄</span>${p.name || 'Document'}</a>`).join('')}
+    </div>` : '';
+
   return `<div class="venue-scoresheet">
     <div class="vs-header">
       <div>
@@ -3381,6 +3495,7 @@ function renderScoresheetDisplay(data) {
     ${data.video_url ? `<div class="admin-video-wrap" style="margin:0;border-radius:0"><iframe src="${data.video_url}" allowfullscreen></iframe></div>` : ''}
     ${data.written_review ? `<div style="padding:16px 20px;font-size:14px;line-height:1.7;color:var(--muted2);border-bottom:1px solid var(--border)">${data.written_review}</div>` : ''}
     ${foodHtml}
+    ${pdfHtml}
   </div>`;
 }
 
