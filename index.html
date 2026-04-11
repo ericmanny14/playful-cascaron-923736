@@ -537,11 +537,11 @@ nav ul a:hover{color:var(--ink)}
     </div>
   </div>
   <ul>
-    <li><a onclick="showPage('home')">Feed</a></li>
-    <li><a onclick="navToVenueBrowse()">Venues</a></li>
-    <li><a onclick="showPage('profile')">My Profile</a></li>
-    <li><a class="nav-cta" onclick="handleReviewClick()">+ Submit Review</a></li>
-    <li><a id="admin-nav-btn" style="display:none;color:var(--gold);font-weight:700" onclick="openAdminDash()">👑 Admin</a></li>
+    <li><a href="javascript:void(0)" onclick="showPage('home')">Feed</a></li>
+    <li><a href="javascript:void(0)" onclick="navToVenueBrowse()">Venues</a></li>
+    <li><a href="javascript:void(0)" onclick="showPage('profile')">My Profile</a></li>
+    <li><a href="javascript:void(0)" class="nav-cta" onclick="handleReviewClick()">+ Submit Review</a></li>
+    <li><a href="javascript:void(0)" id="admin-nav-btn" style="display:none;color:var(--gold);font-weight:700" onclick="openAdminDash()">👑 Admin</a></li>
   </ul>
   <div class="nav-right">
     <span class="nav-username hidden" id="nav-username"></span>
@@ -1290,9 +1290,14 @@ const VENUE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 // ═══════════════════════════════════
 // PAGE & UI HELPERS
 // ═══════════════════════════════════
+// Escape a string for safe use inside inline onclick single-quoted attributes
+function esc(s) { return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
 function showPage(name) {
+  const target = document.getElementById('page-' + name);
+  if (!target) return; // guard against invalid page names
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + name).classList.add('active');
+  target.classList.add('active');
   window.scrollTo(0, 0);
   // Clear venue context when leaving the venue page so submit modal doesn't lock the venue field
   if (name !== 'venue') currentVenueId = null;
@@ -1588,6 +1593,7 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
     score_amenities: scores[3],
     score_security: scores[4],
     score_postgame: scores[5],
+    total_score: totalScore,
     review_text: reviewText || null,
     photo_urls: [],
     is_anonymous: isAnonymous || false,
@@ -1707,14 +1713,14 @@ function buildReviewCard(r, i) {
   const adminPip = isAdminReview ? '<div class="admin-pip">👑 Official venn-U Review</div>' : '';
   // Photo gallery HTML
   const photosHtml = (r.photo_urls?.length > 0)
-    ? `<div class="review-photos">${r.photo_urls.map(url =>
-        `<img class="review-photo" src="${url}" alt="Review photo" onclick="openLightbox('${url}')">`
+    ? `<div class="review-photos">${r.photo_urls.filter(Boolean).map(url =>
+        `<img class="review-photo" src="${url}" alt="Review photo" onerror="this.style.display='none'" onclick="openLightbox('${esc(url)}')">`
       ).join('')}</div>`
     : '';
   return `<div class="${cardClass}" style="animation-delay:${i * 0.07}s">
     ${adminPip}
     <div class="card-top">
-      <div><div class="venue-name" onclick="loadVenueDetail('${r.venue_id}','${r.venue_name}')">${r.venue_name || 'Unknown Venue'}</div>
+      <div><div class="venue-name" onclick="loadVenueDetail('${r.venue_id}','${esc(r.venue_name)}')">${r.venue_name || 'Unknown Venue'}</div>
       <div class="venue-meta">${r.section || ''}</div></div>
       <div class="score-badge"><div class="s-num">${parseFloat(r.total_score).toFixed(2)}</div><div class="s-lbl">141 Score</div></div>
     </div>
@@ -1752,6 +1758,14 @@ async function loadVenueDetail(venueId, venueName) {
   // Hide official review display upfront — loadAdminSpotlight will show it when available
   const _displayEl = document.getElementById('admin-scoresheet-display');
   if (_displayEl) { _displayEl.style.display = 'none'; _displayEl.innerHTML = ''; }
+  // Always hide admin editor at the start — loadAdminSpotlight will show it only for admin
+  const _editorEl = document.getElementById('admin-scoresheet-editor');
+  if (_editorEl) _editorEl.style.display = 'none';
+  // Reset sidebar photo cards to prevent stale data from previous venue
+  const _vpCard = document.getElementById('venue-photos-card');
+  if (_vpCard) _vpCard.style.display = 'none';
+  const _cpCard = document.getElementById('community-photos-card');
+  if (_cpCard) _cpCard.style.display = 'none';
   document.getElementById('venue-detail-name').textContent = venueName || 'Loading...';
 
   // Run venue + reviews queries in parallel for faster load
@@ -1837,17 +1851,18 @@ async function loadVenueDetail(venueId, venueName) {
   document.getElementById('venue-reviews-list').innerHTML = reviews.map((r,i) => buildReviewCard(r,i)).join('');
 
   // Community photos from reviews
-  const communityPhotos = reviews.flatMap(r => r.photo_urls || []);
+  const communityPhotos = reviews.flatMap(r => r.photo_urls || []).filter(Boolean);
   const cpCard = document.getElementById('community-photos-card');
   const cpGrid = document.getElementById('community-photos-sidebar');
   if (cpCard && cpGrid) {
     if (communityPhotos.length) {
       cpCard.style.display = 'block';
       cpGrid.innerHTML = communityPhotos.map(url =>
-        `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer" onclick="openLightbox('${url}')">`
+        `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer" onerror="this.style.display='none'" onclick="openLightbox('${esc(url)}')">`
       ).join('');
     } else {
       cpCard.style.display = 'none';
+      cpGrid.innerHTML = '';
     }
   }
 
@@ -1895,7 +1910,7 @@ function renderHomeVenueGrid(venues) {
       const badge = score != null
         ? `<div class="score-badge"><div class="s-num">${parseFloat(score).toFixed(2)}</div><div class="s-lbl">141 Score</div></div>`
         : `<div class="score-badge" style="opacity:0.35"><div class="s-num">–</div><div class="s-lbl">No Score</div></div>`;
-      return `<div class="review-card" style="cursor:pointer" onclick="handleVenueClick('${v.id}','${v.name.replace(/'/g,"\\'")}')">
+      return `<div class="review-card" style="cursor:pointer" onclick="handleVenueClick('${v.id}','${esc(v.name)}')">
         <div class="card-top">
           <div><div class="venue-name">${v.name}</div><div class="venue-meta">${location}</div></div>
           ${badge}
@@ -1970,7 +1985,7 @@ async function loadVenueBrowse() {
     const scoreBadge = score != null
       ? `<div class="score-badge"><div class="s-num">${parseFloat(score).toFixed(2)}</div><div class="s-lbl">141 Score</div></div>`
       : `<div class="score-badge" style="opacity:0.4"><div class="s-num">–</div><div class="s-lbl">No Score</div></div>`;
-    return `<div class="review-card" style="cursor:pointer" onclick="loadVenueDetail('${v.id}','${v.name.replace(/'/g, "\\'")}')">
+    return `<div class="review-card" style="cursor:pointer" onclick="loadVenueDetail('${v.id}','${esc(v.name)}')">
       <div class="card-top">
         <div><div class="venue-name">${v.name}</div><div class="venue-meta">${location}</div></div>
         ${scoreBadge}
@@ -2033,13 +2048,15 @@ function populateVenueSidebar(photos, foodItems) {
   const photosCard = document.getElementById('venue-photos-card');
   const photoGrid = document.getElementById('venue-photos-sidebar');
   if (photosCard && photoGrid) {
-    if (photos?.length) {
+    const validPhotos = (photos || []).filter(Boolean);
+    if (validPhotos.length) {
       photosCard.style.display = 'block';
-      photoGrid.innerHTML = photos.map(url =>
-        `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer" onclick="openLightbox('${url}')">`
+      photoGrid.innerHTML = validPhotos.map(url =>
+        `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer" onerror="this.style.display='none'" onclick="openLightbox('${esc(url)}')">`
       ).join('');
     } else {
       photosCard.style.display = 'none';
+      photoGrid.innerHTML = '';
     }
   }
   const foodCard = document.getElementById('venue-food-card');
@@ -2333,7 +2350,7 @@ async function loadTopVenues() {
     .map(([id,v]) => ({ id, name: v.name, avg: v.scores.reduce((a,b)=>a+b,0)/v.scores.length }))
     .sort((a,b) => b.avg - a.avg).slice(0,5);
   document.getElementById('top-venues-list').innerHTML = ranked.map((v,i) =>
-    `<div class="lb-item" onclick="loadVenueDetail('${v.id}','${v.name}')">
+    `<div class="lb-item" onclick="loadVenueDetail('${v.id}','${esc(v.name)}')">
       <div class="lb-rank">#${i+1}</div>
       <div class="lb-info"><div class="lb-name">${v.name}</div></div>
       <div class="lb-sc">${v.avg.toFixed(2)}</div>
@@ -2412,7 +2429,7 @@ async function loadProfile() {
   if (stamps?.length) {
     const sportEmoji = s => (s?.toLowerCase().includes('nfl')||s?.toLowerCase().includes('football'))?'🏈':(s?.toLowerCase().includes('mlb')||s?.toLowerCase().includes('baseball'))?'⚾':(s?.toLowerCase().includes('nba')||s?.toLowerCase().includes('basketball'))?'🏀':(s?.toLowerCase().includes('nhl')||s?.toLowerCase().includes('hockey'))?'🏒':(s?.toLowerCase().includes('mls')||s?.toLowerCase().includes('soccer'))?'⚽':'🏟️';
     stampsGrid.innerHTML = stamps.map(s => `
-      <div class="stamp stamped" onclick="loadVenueDetail('${s.venue_id}','${s.venues?.name}')">
+      <div class="stamp stamped" onclick="loadVenueDetail('${s.venue_id}','${esc(s.venues?.name)}')">
         <div class="stamp-icon">${sportEmoji(s.venues?.name)}</div>
         <div class="stamp-name">${s.venues?.name || 'Venue'}</div>
       </div>`).join('');
@@ -2581,9 +2598,9 @@ async function loadAdminSpotlight(venueId) {
 
   const d = venue?.admin_scoresheet;
 
-  // Populate editor for admin
+  // Populate editor for admin — explicitly hide for everyone else
+  const editorEl = document.getElementById('admin-scoresheet-editor');
   if (isAdmin()) {
-    const editorEl = document.getElementById('admin-scoresheet-editor');
     if (editorEl) editorEl.style.display = 'block';
     if (d?.total_score != null) {
       const scoreInput = document.getElementById('admin-manual-score');
@@ -2617,12 +2634,14 @@ async function loadAdminSpotlight(venueId) {
       d.food_items.forEach(f => foodItems.push(f));
       renderFoodItems();
     }
+  } else {
+    if (editorEl) editorEl.style.display = 'none';
   }
 
   // Public display — visible to all users
   const displayEl = document.getElementById('admin-scoresheet-display');
   if (displayEl) {
-    if (d?.total_score != null || d?.written_review || d?.video_url) {
+    if (d?.total_score != null || d?.written_review || d?.video_url || d?.pdf_urls?.length) {
       displayEl.style.display = 'block';
       displayEl.innerHTML = renderScoresheetDisplay(d);
     } else {
