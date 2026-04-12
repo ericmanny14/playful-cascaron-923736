@@ -2289,10 +2289,13 @@ function getScoutLevel(count) {
 
 async function loadProfile() {
   if (!currentUser) {
-    document.getElementById('profile-display-name').textContent = 'Not signed in';
-    document.getElementById('profile-handle').textContent = 'Sign in to view your profile';
+    const el = document.getElementById('profile-display-name');
+    if (el) el.textContent = 'Not signed in';
+    const el2 = document.getElementById('profile-handle');
+    if (el2) el2.textContent = 'Sign in to view your profile';
     return;
   }
+  try {
   const { data: profile } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
   currentProfile = profile;
 
@@ -2356,6 +2359,7 @@ async function loadProfile() {
   Object.entries(dotMap).forEach(([key, threshold], i) => {
     const dot = document.getElementById('dot-' + key);
     const line = document.getElementById('line-' + (i+1));
+    if (!dot) return; // guard: element may not exist
     if (stampCount >= threshold) {
       dot.classList.add('done');
       if (line) line.classList.add('done');
@@ -2366,9 +2370,12 @@ async function loadProfile() {
 
   // Avg score
   if (reviews?.length) {
-    const avg = reviews.reduce((s,r) => s + parseFloat(r.total_score), 0) / reviews.length;
-    document.getElementById('ps-avg').textContent = avg.toFixed(2) + ' / 5';
-    document.getElementById('my-reviews-list').innerHTML = reviews.map((r,i) => buildReviewCard(r,i)).join('');
+    const validScores = reviews.map(r => parseFloat(r.total_score)).filter(n => !isNaN(n));
+    const avg = validScores.length ? validScores.reduce((s,n) => s+n, 0) / validScores.length : null;
+    const avgEl = document.getElementById('ps-avg');
+    if (avgEl) avgEl.textContent = avg != null ? avg.toFixed(2) + ' / 5' : '–';
+    const listEl = document.getElementById('my-reviews-list');
+    if (listEl) listEl.innerHTML = reviews.map((r,i) => buildReviewCard(r,i)).join('');
   }
 
   // Badges
@@ -2377,6 +2384,10 @@ async function loadProfile() {
     document.getElementById('badge-perfect').classList.add('earned');
 
   updateNavUI(currentUser);
+  } catch(err) {
+    console.error('loadProfile error:', err);
+    showToast('Error loading profile. Please refresh.', 'error');
+  }
 }
 
 async function saveProfile() {
