@@ -2160,26 +2160,24 @@ async function editReview(reviewId) {
     'm-postgame': review.score_postgame
   };
 
+  // Write scores directly into the real reactions object, then highlight buttons
   Object.entries(prefillScores).forEach(([key, score]) => {
     if (score == null) return;
-    const btns = document.querySelectorAll(`[onclick*="selectReaction"][onclick*="${key}"]`);
-    btns.forEach(btn => {
+    reactions[key] = score; // fix: write to the actual module-level reactions object
+    document.querySelectorAll(`[onclick*="selectReaction"][onclick*="${key}"]`).forEach(btn => {
       try {
-        const src = btn.onclick ? btn.onclick.toString() : btn.getAttribute('onclick') || '';
+        const src = btn.getAttribute('onclick') || '';
         const m = src.match(/,\s*(\d+)\s*[,)]/);
         if (!m) return;
-        const btnScore = parseInt(m[1]);
-        if (btnScore === score) {
+        if (parseInt(m[1]) === score) {
           const wrap = btn.closest('.reaction-btns');
           if (wrap) wrap.querySelectorAll('.r-btn').forEach(b => b.classList.remove('selected'));
           btn.classList.add('selected');
-          window.reactions = window.reactions || {};
-          window.reactions[key] = score;
-          recalcScore(key);
         }
-      } catch(e) { console.error('prefill reaction error:', e); }
+      } catch(e) { /* ignore button highlight errors */ }
     });
   });
+  recalcScore('m-pregame'); // refresh the total score display
 
   // Change submit button to update
   const submitBtn = document.getElementById('modal-submit-btn');
@@ -2191,48 +2189,48 @@ async function editReview(reviewId) {
 
 async function updateReview(reviewId) {
   const btn = document.getElementById('modal-submit-btn');
+  if (!btn) return;
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Updating...';
+  try {
+    const scores = getReactionScores('m');
+    if (scores.some(s => s === undefined)) {
+      showToast('Please select all 6 category reactions', 'error');
+      btn.disabled = false; btn.textContent = 'Update Review';
+      return;
+    }
 
-  const scores = getReactionScores('m');
-  if (scores.some(s => s === undefined)) { 
-    showToast('Please react to all 6 categories', 'error'); 
+    const isAnonymous = document.getElementById('m-anonymous')?.checked || false;
+    const reviewText = document.getElementById('m-review-text')?.value.trim() || '';
+
+    const { error } = await sb.from('reviews').update({
+      score_pregame:    scores[0],
+      score_atmosphere: scores[1],
+      score_comfort:    scores[2],
+      score_amenities:  scores[3],
+      score_security:   scores[4],
+      score_postgame:   scores[5],
+      review_text: reviewText || null,
+      is_anonymous: isAnonymous
+    }).eq('id', reviewId).eq('user_id', currentUser.id);
+
+    if (error) { showToast('Error updating review: ' + error.message, 'error'); return; }
+
+    closeModal('submit');
+    showToast('✅ Review updated!');
+
+    // Reload whichever page is currently active
+    if (currentVenueId && document.getElementById('page-venue')?.classList.contains('active')) {
+      loadVenueDetail(currentVenueId, document.getElementById('venue-detail-name')?.textContent || '');
+    } else if (document.getElementById('page-profile')?.classList.contains('active')) {
+      loadProfile();
+    } else {
+      loadReviews('recent');
+    }
+  } catch(err) {
+    console.error('updateReview error:', err);
+    showToast('Something went wrong. Please try again.', 'error');
+  } finally {
     btn.disabled = false; btn.textContent = 'Update Review';
-    return; 
-  }
-
-  const isAnonymous = document.getElementById('m-anonymous').checked;
-  const reviewText = document.getElementById('m-review-text').value.trim();
-  const totalScore = scores.reduce((a, b) => a + b, 0) / 6;
-
-  const { error } = await sb.from('reviews').update({
-    score_pregame:    scores[0],
-    score_atmosphere: scores[1],
-    score_comfort:    scores[2],
-    score_amenities:  scores[3],
-    score_security:   scores[4],
-    score_postgame:   scores[5],
-    review_text: reviewText || null,
-    is_anonymous: isAnonymous
-  }).eq('id', reviewId).eq('user_id', currentUser.id);
-
-  btn.disabled = false; btn.textContent = 'Update Review';
-
-  if (error) {
-    showToast('Error updating review: ' + error.message, 'error');
-    return;
-  }
-
-  closeModal('submit');
-  showToast('✅ Review updated successfully!');
-
-  // Reload the page we're currently on
-  if (currentVenueId && document.getElementById('page-venue')?.classList.contains('active')) {
-    const vName = document.getElementById('venue-detail-name')?.textContent || '';
-    loadVenueDetail(currentVenueId, vName);
-  } else if (document.getElementById('page-profile')?.classList.contains('active')) {
-    loadProfile();
-  } else {
-    loadReviews('recent');
   }
 }
 
