@@ -334,21 +334,8 @@ nav ul a:hover{color:var(--ink)}
 .admin-video-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none;border-radius:10px}
 .admin-video-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);font-size:13px;gap:8px}
 /* ── PHOTO UPLOAD ── */
-.photo-upload-area{border:1.5px dashed var(--border2);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:11px;background:var(--bg3)}
-.photo-upload-area:hover{border-color:var(--blue);background:rgba(30,127,212,.05)}
-.photo-upload-area input[type=file]{display:none}
-.photo-preview-grid{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.photo-thumb{width:70px;height:70px;border-radius:6px;object-fit:cover;border:1px solid var(--border2)}
-.photo-thumb-wrap{position:relative}
-.photo-remove{position:absolute;top:-5px;right:-5px;width:18px;height:18px;background:var(--dislike);border-radius:50%;border:none;cursor:pointer;color:white;font-size:10px;display:flex;align-items:center;justify-content:center;line-height:1}
 /* ── REVIEW PHOTOS ── */
-.review-photos{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.review-photo{width:80px;height:80px;border-radius:6px;object-fit:cover;border:1px solid var(--border);cursor:pointer;transition:transform .15s}
-.review-photo:hover{transform:scale(1.05)}
 /* ── PHOTO LIGHTBOX ── */
-.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99999;align-items:center;justify-content:center;cursor:pointer}
-.lightbox.open{display:flex}
-.lightbox img{max-width:90vw;max-height:90vh;border-radius:10px;object-fit:contain}
 /* ── ADMIN PANEL ── */
 .admin-panel{background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:16px;margin-bottom:14px}
 .admin-panel-title{font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:12px;display:flex;align-items:center;gap:6px}
@@ -386,10 +373,6 @@ nav ul a:hover{color:var(--ink)}
 .admin-score-item{background:var(--bg3);border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border)}
 .admin-score-item label{display:block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px;font-family:'Space Mono',monospace}
 .admin-score-item input{width:100%;background:transparent;border:none;font-family:'Space Mono',monospace;font-size:22px;font-weight:700;color:var(--blue-light);text-align:center;outline:none}
-.admin-photo-grid{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.admin-photo-item{position:relative;width:90px;height:90px}
-.admin-photo-item img{width:100%;height:100%;object-fit:cover;border-radius:8px;border:1px solid var(--border)}
-.admin-photo-remove{position:absolute;top:-6px;right:-6px;width:20px;height:20px;background:var(--dislike);border:2px solid var(--bg);border-radius:50%;cursor:pointer;color:white;font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:700}
 .admin-upload-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;background:var(--bg3);border:1.5px dashed var(--border2);border-radius:8px;cursor:pointer;font-size:13px;color:var(--muted2);transition:all .15s;font-family:'Barlow',sans-serif;font-weight:600}
 .admin-upload-btn:hover{border-color:var(--blue);color:var(--blue-light)}
 .tag-input-wrap{display:flex;flex-wrap:wrap;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:8px;min-height:42px;cursor:text;align-items:center}
@@ -701,15 +684,6 @@ nav ul a:hover{color:var(--ink)}
           </div>
           <div class="form-row"><label>Your Review</label><textarea id="qs-review-text" placeholder="Tell the community…" style="min-height:60px"></textarea></div>
           <div class="form-row">
-            <label>📸 Photos (optional)</label>
-            <div class="photo-upload-area" onclick="document.getElementById('qs-photo-input').click()">
-              <input type="file" id="qs-photo-input" accept="image/*" multiple onchange="previewPhotos(this,'qs-photo-previews')">
-              <div style="font-size:20px;margin-bottom:4px">📸</div>
-              <div style="font-size:12px;color:var(--muted2)">Click to add photos</div>
-            </div>
-            <div class="photo-preview-grid" id="qs-photo-previews"></div>
-          </div>
-          <div class="form-row">
             <label style="display:flex;align-items:center;gap:8px">
               <input type="checkbox" id="qs-anonymous" style="margin:0">
               Post anonymously
@@ -844,15 +818,6 @@ nav ul a:hover{color:var(--ink)}
       </div>
       <button class="btn btn-grad" style="width:100%" onclick="handleReviewClick()">Review This Venue</button>
 
-      <div class="venue-sid-card" id="venue-photos-card" style="display:none">
-        <h4>📸 Venue Photos</h4>
-        <div id="venue-photos-sidebar" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px"></div>
-      </div>
-
-      <div class="venue-sid-card" id="community-photos-card" style="display:none">
-        <h4>📸 Community Photos</h4>
-        <div id="community-photos-sidebar" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px"></div>
-      </div>
 
       <div class="venue-sid-card" id="venue-food-card" style="display:none">
         <h4>🍔 What People Ate</h4>
@@ -1068,16 +1033,6 @@ nav ul a:hover{color:var(--ink)}
     </div>
     <div class="form-row"><label>Your Review</label><textarea id="m-review-text" placeholder="Tell the community about your full experience…" style="min-height:90px"></textarea></div>
     <div class="form-row">
-      <label>📸 Add Photos (optional)</label>
-      <div class="photo-upload-area" onclick="document.getElementById('m-photo-input').click()">
-        <input type="file" id="m-photo-input" accept="image/*" multiple onchange="previewPhotos(this,'m-photo-previews')">
-        <div style="font-size:24px;margin-bottom:6px">📸</div>
-        <div style="font-size:13px;color:var(--muted2);font-weight:500">Click to add photos</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px">Up to 4 photos · JPG, PNG, WEBP</div>
-      </div>
-      <div class="photo-preview-grid" id="m-photo-previews"></div>
-    </div>
-    <div class="form-row">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" id="m-anonymous" style="margin:0">
         Post anonymously
@@ -1101,9 +1056,6 @@ nav ul a:hover{color:var(--ink)}
 </div>
 
 <!-- LIGHTBOX -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <img id="lightbox-img" src="" alt="">
-</div>
 
 
 <!-- ══════════════ ADMIN DASHBOARD ══════════════ -->
@@ -1129,7 +1081,6 @@ nav ul a:hover{color:var(--ink)}
         <div class="stat-tile"><div class="stat-tile-n" id="adm-stat-venues">–</div><div class="stat-tile-l">Venues</div></div>
         <div class="stat-tile"><div class="stat-tile-n" id="adm-stat-reviews">–</div><div class="stat-tile-l">Reviews</div></div>
         <div class="stat-tile"><div class="stat-tile-n" id="adm-stat-users">–</div><div class="stat-tile-l">Members</div></div>
-        <div class="stat-tile"><div class="stat-tile-n" id="adm-stat-photos">–</div><div class="stat-tile-l">Photos Uploaded</div></div>
       </div>
       <div class="admin-card">
         <h3>🕐 Recent Reviews</h3>
@@ -1191,9 +1142,6 @@ nav ul a:hover{color:var(--ink)}
 
         <div class="admin-field">
           <label>📸 Official Venue Photos</label>
-          <div class="admin-photo-grid" id="adv-photos-grid"></div>
-          <label class="admin-upload-btn" for="adv-photos-input">+ Add Photos</label>
-          <input type="file" id="adv-photos-input" accept="image/*" multiple style="display:none" onchange="previewAdminPhotos(this)">
         </div>
 
         <div class="admin-field">
@@ -1571,10 +1519,7 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
   }
   } // end else (no knownVenueId)
 
-  // Upload photos BEFORE inserting so URLs go straight into the INSERT row
-  const photoUrls = await uploadPhotos(prefix === 'qs' ? 'qs-photo-input' : 'm-photo-input');
-
-  // Insert review (includes photo_urls so no separate UPDATE needed)
+  // Insert review
   const { data: review, error: re } = await sb.from('reviews').insert({
     user_id: currentUser.id,
     venue_id: venueId,
@@ -1588,7 +1533,6 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
     score_postgame: scores[5],
     review_text: reviewText || null,
     is_anonymous: isAnonymous || false,
-    photo_urls: photoUrls.length > 0 ? photoUrls : [],
   }).select('id').single();
 
   if (re) { showToast('Error saving review: ' + re.message, 'error'); return false; }
@@ -1699,12 +1643,6 @@ function buildReviewCard(r, i) {
   const isAdminReview = r.user_id === ADMIN_ID;
   const cardClass = isAdminReview ? 'admin-review-card' : 'review-card';
   const adminPip = isAdminReview ? '<div class="admin-pip">👑 Official venn-U Review</div>' : '';
-  // Photo gallery HTML
-  const photosHtml = (r.photo_urls?.length > 0)
-    ? `<div class="review-photos">${r.photo_urls.map(url =>
-        `<img class="review-photo" src="${url}" alt="Review photo" onclick="event.stopPropagation();openLightbox('${url}')" title="Click to enlarge">`
-      ).join('')}</div>`
-    : '';
   return `<div class="${cardClass}" style="animation-delay:${i * 0.07}s">
     ${adminPip}
     <div class="card-top">
@@ -1721,7 +1659,6 @@ function buildReviewCard(r, i) {
       <div class="r-chip post-chip"><span class="r-chip-reaction">${em[r.score_postgame]}</span><span class="r-chip-label">Post-Game</span></div>
     </div>
     ${r.review_text ? `<p class="review-body">${r.review_text}</p>` : ''}
-    ${photosHtml}
     <div class="card-foot">
       <div class="reviewer">
         <div class="avi" style="background:var(--grad)">${initials}</div>
@@ -1847,21 +1784,6 @@ async function loadVenueDetail(venueId, venueName) {
       pdfCard.style.display = 'block';
     } else {
       pdfCard.style.display = 'none';
-    }
-  }
-
-  // Community photos from reviews
-  const communityPhotos = reviews.flatMap(r => r.photo_urls || []);
-  const cpCard = document.getElementById('community-photos-card');
-  const cpGrid = document.getElementById('community-photos-sidebar');
-  if (cpCard && cpGrid) {
-    if (communityPhotos.length) {
-      cpCard.style.display = 'block';
-      cpGrid.innerHTML = communityPhotos.map(url =>
-        `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer" onclick="event.stopPropagation();openLightbox('${url}')" title="Click to enlarge">`
-      ).join('');
-    } else {
-      cpCard.style.display = 'none';
     }
   }
 
@@ -2044,18 +1966,6 @@ async function admDeleteVenue(venueId, venueName) {
 }
 
 function populateVenueSidebar(photos, foodItems) {
-  const photosCard = document.getElementById('venue-photos-card');
-  const photoGrid = document.getElementById('venue-photos-sidebar');
-  if (photosCard && photoGrid) {
-    if (photos?.length) {
-      photosCard.style.display = 'block';
-      photoGrid.innerHTML = photos.map(url =>
-        `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer" onclick="openLightbox('${url}')">`
-      ).join('');
-    } else {
-      photosCard.style.display = 'none';
-    }
-  }
   const foodCard = document.getElementById('venue-food-card');
   const foodList = document.getElementById('venue-food-sidebar');
   if (foodCard && foodList) {
@@ -2506,87 +2416,6 @@ const ADMIN_ID = 'f20ba162-708d-49f5-bdef-d5b44d884f80';
 function isAdmin() { return currentUser?.id === ADMIN_ID; }
 
 // ═══════════════════════════════════
-// PHOTO UPLOAD HELPERS
-// ═══════════════════════════════════
-function previewPhotos(input, previewContainerId) {
-  const container = document.getElementById(previewContainerId);
-  if (!container) return;
-  container.innerHTML = '';
-  const files = Array.from(input.files).slice(0, 4);
-  files.forEach((file, i) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const wrap = document.createElement('div');
-      wrap.className = 'photo-thumb-wrap';
-      wrap.innerHTML = `<img class="photo-thumb" src="${e.target.result}">
-        <button class="photo-remove" onclick="removePhoto(this,'${input.id}','${previewContainerId}',${i})">✕</button>`;
-      container.appendChild(wrap);
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-function removePhoto(btn, inputId, previewId, idx) {
-  const input = document.getElementById(inputId);
-  const dt = new DataTransfer();
-  Array.from(input.files).forEach((f, i) => { if (i !== idx) dt.items.add(f); });
-  input.files = dt.files;
-  previewPhotos(input, previewId);
-}
-
-// Upload photos BEFORE inserting a review so the URLs can be included
-// in the INSERT directly — avoids needing a separate UPDATE (and its RLS policy).
-async function uploadPhotos(inputId) {
-  try {
-    const input = document.getElementById(inputId);
-    if (!input?.files?.length) return [];
-    if (!currentUser) return [];
-    const urls = [];
-    let failCount = 0;
-    for (const file of Array.from(input.files).slice(0, 4)) {
-      try {
-        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-        // Use a random slug — no review ID needed since we upload before insert
-        const path = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error } = await sb.storage.from('review-photos').upload(path, file, { upsert: true });
-        if (error) {
-          console.error('Photo upload error:', error.message, error);
-          failCount++;
-        } else {
-          const { data } = sb.storage.from('review-photos').getPublicUrl(path);
-          urls.push(data.publicUrl);
-        }
-      } catch (fileErr) {
-        console.error('Error uploading file:', fileErr);
-        failCount++;
-      }
-    }
-    if (failCount > 0 && urls.length === 0) {
-      showToast('⚠️ Photos failed to upload — make sure the "review-photos" bucket exists and is set to Public in Supabase Storage.', 'error');
-    } else if (failCount > 0) {
-      showToast(`⚠️ ${failCount} photo(s) failed to upload.`, 'error');
-    }
-    // Clear the input + previews
-    input.value = '';
-    const previewId = inputId === 'qs-photo-input' ? 'qs-photo-previews' : 'm-photo-previews';
-    const previews = document.getElementById(previewId);
-    if (previews) previews.innerHTML = '';
-    return urls;
-  } catch (err) {
-    console.error('uploadPhotos crashed:', err);
-    return [];
-  }
-}
-
-function openLightbox(src) {
-  document.getElementById('lightbox-img').src = src;
-  document.getElementById('lightbox').classList.add('open');
-}
-function closeLightbox() {
-  document.getElementById('lightbox').classList.remove('open');
-}
-
-// ═══════════════════════════════════
 // ADMIN REVIEW FUNCTIONS
 // ═══════════════════════════════════
 async function saveAdminReview() {
@@ -2616,7 +2445,7 @@ async function saveAdminReview() {
 
 async function loadAdminSpotlight(venueId) {
   const { data: venue } = await sb.from('venues')
-    .select('admin_scoresheet, admin_review_text, admin_review_video, admin_review_date, admin_reviewer_name, photo_urls')
+    .select('admin_scoresheet, admin_review_text, admin_review_video, admin_review_date, admin_reviewer_name')
     .eq('id', venueId).single();
 
   const d = venue?.admin_scoresheet;
@@ -2672,10 +2501,9 @@ async function loadAdminSpotlight(venueId) {
     }
   }
 
-  // Populate sidebar: photos and food items
-  const venuePhotos = venue?.photo_urls || [];
+  // Populate sidebar: food items
   const foodItemsList = d?.food_items || [];
-  populateVenueSidebar(venuePhotos, foodItemsList);
+  populateVenueSidebar([], foodItemsList);
 }
 
 sb.auth.onAuthStateChange(async (event, session) => {
@@ -2848,10 +2676,6 @@ async function admLoadOverview() {
   document.getElementById('adm-stat-venues').textContent = vc || 0;
   document.getElementById('adm-stat-reviews').textContent = rc || 0;
   document.getElementById('adm-stat-users').textContent = uc || 0;
-  // Count total photos
-  const { data: photoData } = await sb.from('reviews').select('photo_urls');
-  const totalPhotos = photoData?.reduce((s,r) => s + (r.photo_urls?.length||0), 0) || 0;
-  document.getElementById('adm-stat-photos').textContent = totalPhotos;
   // Recent reviews
   const { data: recent } = await sb.from('reviews')
     .select('*, profiles(display_name)')
@@ -2943,11 +2767,6 @@ async function admEditVenue(venueId) {
   const wrap = document.getElementById('adv-tags-wrap');
   wrap.querySelectorAll('.tag-pill').forEach(t => t.remove());
   (v.tags || []).forEach(tag => addTagPill(tag));
-  // Photos grid
-  const pg = document.getElementById('adv-photos-grid');
-  pg.innerHTML = (v.photo_urls || []).map(url =>
-    `<div class="admin-photo-item"><img src="${url}"><div class="admin-photo-remove" onclick="removeAdminPhoto(this,'${url}','${v.id}')">✕</div></div>`
-  ).join('');
   // PDF
   document.getElementById('adv-pdf-remove').value = '0';
   document.getElementById('adv-pdf-input').value = '';
@@ -3057,37 +2876,12 @@ async function saveAdminVenue() {
     await sb.from('venues').update({ pdf_url: null }).eq('id', venueId);
   }
 
-  // Upload official photos
-  const photoFiles = document.getElementById('adv-photos-input').files;
-  if (photoFiles?.length) {
-    const urls = [];
-    for (const file of Array.from(photoFiles)) {
-      const ext = file.name.split('.').pop();
-      const path = `venues/${venueId}/${Date.now()}.${ext}`;
-      await sb.storage.from('review-photos').upload(path, file, { upsert: true });
-      const { data: pd } = sb.storage.from('review-photos').getPublicUrl(path);
-      urls.push(pd.publicUrl);
-    }
-    // Append to existing
-    const { data: existing } = await sb.from('venues').select('photo_urls').eq('id', venueId).single();
-    const allUrls = [...(existing?.photo_urls || []), ...urls];
-    await sb.from('venues').update({ photo_urls: allUrls }).eq('id', venueId);
-  }
-
   _venueCache = null; // bust browse cache
   showToast('✅ Venue saved!');
   admLoadVenueList('');
   document.getElementById('adm-venue-form').style.display = 'none';
   // Pre-load venue detail in background so it's fresh when admin closes the dash
   if (venueId) loadVenueDetail(venueId, name).catch(() => {});
-}
-
-async function removeAdminPhoto(btn, url, venueId) {
-  const { data: v } = await sb.from('venues').select('photo_urls').eq('id', venueId).single();
-  const newUrls = (v?.photo_urls || []).filter(u => u !== url);
-  await sb.from('venues').update({ photo_urls: newUrls }).eq('id', venueId);
-  btn.parentElement.remove();
-  showToast('Photo removed');
 }
 
 // ── ADMIN REVIEW MODERATION ──
@@ -3234,20 +3028,6 @@ function previewPdfFile(input) {
   } else {
     nameEl.textContent = '';
   }
-}
-
-function previewAdminPhotos(input) {
-  const grid = document.getElementById('adv-photos-grid');
-  Array.from(input.files).slice(0,8).forEach(file => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const wrap = document.createElement('div');
-      wrap.className = 'admin-photo-item';
-      wrap.innerHTML = `<img src="${e.target.result}"><div class="admin-photo-remove" onclick="this.parentElement.remove()">✕</div>`;
-      grid.appendChild(wrap);
-    };
-    reader.readAsDataURL(file);
-  });
 }
 
 // ── RICH TEXT EDITOR ──
@@ -3435,21 +3215,10 @@ async function _saveAdminScoresheetInner() {
 
   if (error) { showToast('Error saving: ' + error.message, 'error'); return; }
 
-  // Verify the save actually went through (RLS can silently no-op an UPDATE)
-  const { data: verify } = await sb.from('venues')
-    .select('admin_scoresheet')
-    .eq('id', currentVenueId)
-    .single();
-  const savedScore = verify?.admin_scoresheet?.total_score;
-  if (totalScore !== null && savedScore !== totalScore) {
-    showToast('⚠️ Save may have failed — check Supabase RLS policies for venues UPDATE', 'error');
-    return;
-  }
-
   // Also upsert a record in reviews table so it appears on admin's profile page
   const clamp = v => v == null ? null : Math.min(5, Math.max(3, Math.round(v)));
   const vname = document.getElementById('venue-detail-name')?.textContent || '';
-  await sb.from('reviews').upsert({
+  try { await sb.from('reviews').upsert({
     user_id: currentUser.id,
     venue_id: currentVenueId,
     venue_name: vname,
@@ -3461,7 +3230,7 @@ async function _saveAdminScoresheetInner() {
     score_postgame:   clamp(scoresheetData.cat_postgame),
     review_text: scoresheetData.written_review || null,
     is_anonymous: false,
-  }, { onConflict: 'user_id,venue_id', ignoreDuplicates: false });
+  }, { onConflict: 'user_id,venue_id', ignoreDuplicates: false }); } catch(e) { console.warn('admin review upsert skipped:', e.message); }
 
   _venueCache = null; // bust cache so new score appears in browse
   showToast('✅ Official review published!');
