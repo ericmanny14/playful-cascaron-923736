@@ -2242,7 +2242,7 @@ async function editReview(reviewId) {
   document.getElementById('m-anonymous').checked = review.is_anonymous || false;
 
   // Pre-select reactions
-  const reactions = {
+  const prefillScores = {
     'm-pregame': review.score_pregame,
     'm-atmosphere': review.score_atmosphere,
     'm-comfort': review.score_comfort,
@@ -2251,13 +2251,24 @@ async function editReview(reviewId) {
     'm-postgame': review.score_postgame
   };
 
-  Object.entries(reactions).forEach(([key, score]) => {
+  Object.entries(prefillScores).forEach(([key, score]) => {
+    if (score == null) return;
     const btns = document.querySelectorAll(`[onclick*="selectReaction"][onclick*="${key}"]`);
     btns.forEach(btn => {
-      const btnScore = parseInt(btn.onclick.toString().match(/,(\d+)\)/)[1]);
-      if (btnScore === score) {
-        selectReaction(btn, key, score);
-      }
+      try {
+        const src = btn.onclick ? btn.onclick.toString() : btn.getAttribute('onclick') || '';
+        const m = src.match(/,\s*(\d+)\s*[,)]/);
+        if (!m) return;
+        const btnScore = parseInt(m[1]);
+        if (btnScore === score) {
+          const wrap = btn.closest('.reaction-btns');
+          if (wrap) wrap.querySelectorAll('.r-btn').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          window.reactions = window.reactions || {};
+          window.reactions[key] = score;
+          recalcScore(key);
+        }
+      } catch(e) { console.error('prefill reaction error:', e); }
     });
   });
 
@@ -2282,6 +2293,7 @@ async function updateReview(reviewId) {
 
   const isAnonymous = document.getElementById('m-anonymous').checked;
   const reviewText = document.getElementById('m-review-text').value.trim();
+  const totalScore = scores.reduce((a, b) => a + b, 0) / 6;
 
   const { error } = await sb.from('reviews').update({
     score_pregame:    scores[0],
@@ -2290,6 +2302,7 @@ async function updateReview(reviewId) {
     score_amenities:  scores[3],
     score_security:   scores[4],
     score_postgame:   scores[5],
+    total_score:      totalScore,
     review_text: reviewText || null,
     is_anonymous: isAnonymous
   }).eq('id', reviewId).eq('user_id', currentUser.id);
@@ -2304,13 +2317,12 @@ async function updateReview(reviewId) {
   closeModal('submit');
   showToast('✅ Review updated successfully!');
 
-  // Reset submit button
-  btn.textContent = 'Publish to 141 venn-U';
-  btn.onclick = submitModalReview;
-
-  // Reload current page data
-  if (window.location.hash.includes('venue')) {
-    loadVenueDetail(currentVenueId, document.getElementById('venue-detail-name').textContent);
+  // Reload the page we're currently on
+  if (currentVenueId && document.getElementById('page-venue')?.classList.contains('active')) {
+    const vName = document.getElementById('venue-detail-name')?.textContent || '';
+    loadVenueDetail(currentVenueId, vName);
+  } else if (document.getElementById('page-profile')?.classList.contains('active')) {
+    loadProfile();
   } else {
     loadReviews('recent');
   }
