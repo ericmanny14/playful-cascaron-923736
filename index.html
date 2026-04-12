@@ -1456,6 +1456,9 @@ async function signIn() {
 }
 
 async function signOut() {
+  // Close admin dashboard if open before auth state changes
+  const dash = document.getElementById('admin-dash');
+  if (dash) dash.classList.remove('open');
   try {
     await sb.auth.signOut();
   } catch (err) {
@@ -1583,6 +1586,7 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
     score_postgame: scores[5],
     review_text: reviewText || null,
     is_anonymous: isAnonymous || false,
+    total_score: totalScore,
   }).select('id').single();
 
   if (re) { showToast('Error saving review: ' + re.message, 'error'); return false; }
@@ -3434,10 +3438,27 @@ async function _saveAdminScoresheetInner() {
     return;
   }
 
+  // Also upsert a record in reviews table so it appears on admin's profile page
+  const clamp = v => v == null ? null : Math.min(5, Math.max(3, Math.round(v)));
+  const vname = document.getElementById('venue-detail-name')?.textContent || '';
+  await sb.from('reviews').upsert({
+    user_id: currentUser.id,
+    venue_id: currentVenueId,
+    venue_name: vname,
+    score_pregame:    clamp(scoresheetData.cat_pregame),
+    score_atmosphere: clamp(scoresheetData.cat_atmosphere),
+    score_comfort:    clamp(scoresheetData.cat_comfort),
+    score_amenities:  clamp(scoresheetData.cat_amenities),
+    score_security:   clamp(scoresheetData.cat_security),
+    score_postgame:   clamp(scoresheetData.cat_postgame),
+    total_score: totalScore,
+    review_text: scoresheetData.written_review || null,
+    is_anonymous: false,
+  }, { onConflict: 'user_id,venue_id', ignoreDuplicates: false });
+
   _venueCache = null; // bust cache so new score appears in browse
   showToast('✅ Official review published!');
   // Reload full venue detail so header, display and editor all reflect saved data
-  const vname = document.getElementById('venue-detail-name')?.textContent || '';
   await loadVenueDetail(currentVenueId, vname);
 } // end _saveAdminScoresheetInner
 
