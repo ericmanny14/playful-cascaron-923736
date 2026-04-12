@@ -1591,7 +1591,11 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
   // Upload photos if any and update review
   const photoUrls = await uploadPhotos(prefix === 'qs' ? 'qs-photo-input' : 'm-photo-input', review.id);
   if (photoUrls.length > 0) {
-    await sb.from('reviews').update({ photo_urls: photoUrls }).eq('id', review.id);
+    const { error: photoUpdateErr } = await sb.from('reviews').update({ photo_urls: photoUrls }).eq('id', review.id);
+    if (photoUpdateErr) {
+      console.error('photo_urls update failed:', photoUpdateErr.message);
+      showToast('⚠️ Photos uploaded but not saved — add a photo_urls text[] column to your reviews table in Supabase.', 'error');
+    }
   }
 
   // Add passport stamp
@@ -1742,9 +1746,11 @@ async function loadVenueDetail(venueId, venueName) {
   currentVenueId = venueId;
   showPage('venue');
   document.getElementById('venue-141-bar').style.display = '';  // restore bar hidden during browse
-  // Always hide official review display upfront — loadAdminSpotlight will show it only for admins
+  // Always hide official review display and editor upfront — loadAdminSpotlight restores them
   const _displayEl = document.getElementById('admin-scoresheet-display');
   if (_displayEl) { _displayEl.style.display = 'none'; _displayEl.innerHTML = ''; }
+  const _editorEl = document.getElementById('admin-scoresheet-editor');
+  if (_editorEl) _editorEl.style.display = 'none';
   document.getElementById('venue-detail-name').textContent = venueName || 'Loading...';
 
   // Run venue + reviews queries in parallel for faster load
@@ -2593,9 +2599,9 @@ async function loadAdminSpotlight(venueId) {
   const d = venue?.admin_scoresheet;
 
   // Populate editor for admin
+  const _se = document.getElementById('admin-scoresheet-editor');
   if (isAdmin()) {
-    const editorEl = document.getElementById('admin-scoresheet-editor');
-    if (editorEl) editorEl.style.display = 'block';
+    if (_se) _se.style.display = 'block';
     if (d?.total_score != null) {
       const scoreInput = document.getElementById('admin-manual-score');
       if (scoreInput) scoreInput.value = d.total_score;
@@ -2628,13 +2634,14 @@ async function loadAdminSpotlight(venueId) {
       d.food_items.forEach(f => foodItems.push(f));
       renderFoodItems();
     }
+  } else {
+    if (_se) _se.style.display = 'none';
   }
 
   // Public display
   const displayEl = document.getElementById('admin-scoresheet-display');
   if (displayEl) {
-    // Only admins see the official review display
-    if (isAdmin() && (d?.total_score != null || d?.written_review || d?.video_url)) {
+    if (d?.total_score != null || d?.written_review || d?.video_url) {
       displayEl.style.display = 'block';
       displayEl.innerHTML = renderScoresheetDisplay(d);
     } else {
