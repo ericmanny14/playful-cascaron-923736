@@ -1459,55 +1459,47 @@ async function signOut() {
   // Close admin dashboard if open before auth state changes
   const dash = document.getElementById('admin-dash');
   if (dash) dash.classList.remove('open');
+  currentUser = null; currentProfile = null;
   try {
     await sb.auth.signOut();
   } catch (err) {
     console.error('signOut error:', err);
   }
-  currentUser = null; currentProfile = null;
-  try { updateNavUI(null); } catch(e) { console.error('updateNavUI error on signout:', e); }
-  showToast('Signed out successfully');
-  // Force a clean reload so all state is fully cleared
-  setTimeout(() => {
-    window.location.href = window.location.pathname;
-  }, 800);
+  // Force a full page reload — cleanest way to reset all state
+  window.location.href = window.location.pathname;
 }
 
 function updateNavUI(user) {
-  const avatar = document.getElementById('nav-avatar');
-  const username = document.getElementById('nav-username');
-  const signout = document.getElementById('nav-signout');
-  const signinBtn = document.getElementById('nav-signin-btn');
-  const banner = document.getElementById('auth-banner');
-  const qsGate = document.getElementById('qs-signin-gate');
-  const qsForm = document.getElementById('qs-form-body');
-  showAdminNav();
-  if (user) {
-    const name = currentProfile?.display_name || user.email.split('@')[0];
-    const initials = getAvatarInitials(name);
-    avatar.textContent = initials;
-    username.textContent = currentProfile?.username ? '@' + currentProfile.username : name;
-    // Show logged-in elements
-    avatar.classList.remove('hidden');
-    username.classList.remove('hidden');
-    signout.classList.remove('hidden');
-    // Hide logged-out elements
-    signinBtn.classList.add('hidden');
-    banner.classList.add('hidden');
-    // Show quick-review form, hide gate
-    if (qsGate) qsGate.style.display = 'none';
-    if (qsForm) qsForm.style.display = 'block';
-  } else {
-    // Hide logged-in elements
-    avatar.classList.add('hidden');
-    username.classList.add('hidden');
-    signout.classList.add('hidden');
-    // Show logged-out elements
-    signinBtn.classList.remove('hidden');
-    banner.classList.remove('hidden');
-    // Show gate, hide quick-review form
-    if (qsGate) qsGate.style.display = 'block';
-    if (qsForm) qsForm.style.display = 'none';
+  try {
+    const avatar = document.getElementById('nav-avatar');
+    const username = document.getElementById('nav-username');
+    const signout = document.getElementById('nav-signout');
+    const signinBtn = document.getElementById('nav-signin-btn');
+    const banner = document.getElementById('auth-banner');
+    const qsGate = document.getElementById('qs-signin-gate');
+    const qsForm = document.getElementById('qs-form-body');
+    showAdminNav();
+    if (user) {
+      const name = currentProfile?.display_name || user.email?.split('@')[0] || 'Scout';
+      const initials = getAvatarInitials(name);
+      if (avatar) { avatar.textContent = initials; avatar.classList.remove('hidden'); }
+      if (username) { username.textContent = currentProfile?.username ? '@' + currentProfile.username : name; username.classList.remove('hidden'); }
+      if (signout) signout.classList.remove('hidden');
+      if (signinBtn) signinBtn.classList.add('hidden');
+      if (banner) banner.classList.add('hidden');
+      if (qsGate) qsGate.style.display = 'none';
+      if (qsForm) qsForm.style.display = 'block';
+    } else {
+      if (avatar) avatar.classList.add('hidden');
+      if (username) username.classList.add('hidden');
+      if (signout) signout.classList.add('hidden');
+      if (signinBtn) signinBtn.classList.remove('hidden');
+      if (banner) banner.classList.remove('hidden');
+      if (qsGate) qsGate.style.display = 'block';
+      if (qsForm) qsForm.style.display = 'none';
+    }
+  } catch(e) {
+    console.error('updateNavUI error:', e);
   }
 }
 
