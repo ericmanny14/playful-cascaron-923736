@@ -1465,9 +1465,12 @@ async function signOut() {
     console.error('signOut error:', err);
   }
   currentUser = null; currentProfile = null;
-  updateNavUI(null);
+  try { updateNavUI(null); } catch(e) { console.error('updateNavUI error on signout:', e); }
   showToast('Signed out successfully');
-  showPage('home');
+  // Force a clean reload so all state is fully cleared
+  setTimeout(() => {
+    window.location.href = window.location.pathname;
+  }, 800);
 }
 
 function updateNavUI(user) {
@@ -1547,15 +1550,18 @@ function getReactionScores(prefix) {
 // ═══════════════════════════════════
 // SUBMIT REVIEW
 // ═══════════════════════════════════
-async function submitReview(prefix, venueName, venueDetails, section, reviewText, isAnonymous) {
+async function submitReview(prefix, venueName, venueDetails, section, reviewText, isAnonymous, knownVenueId) {
   const scores = getReactionScores(prefix);
   if (scores.some(s => s === undefined)) { showToast('Please react to all 6 categories', 'error'); return false; }
   if (!venueName) { showToast('Please enter a venue name', 'error'); return false; }
 
   const totalScore = scores.reduce((a,b) => a+b, 0) / 6;
 
-  // Find or create venue
+  // Find or create venue — use knownVenueId when available to avoid wrong-venue name matches
   let venueId = null;
+  if (knownVenueId) {
+    venueId = knownVenueId;
+  } else {
   const { data: existingVenue } = await sb.from('venues').select('id').ilike('name', venueName).maybeSingle();
   if (existingVenue) {
     venueId = existingVenue.id;
@@ -1571,6 +1577,7 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
     venueId = newVenue.id;
     _venueCache = null; // bust browse cache so new venue appears
   }
+  } // end else (no knownVenueId)
 
   // Insert review first to get ID for photo upload
   const { data: review, error: re } = await sb.from('reviews').insert({
@@ -1648,13 +1655,15 @@ async function submitModalReview() {
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Publishing...';
   try {
     const isAnonymous = document.getElementById('m-anonymous').checked;
+    const knownId = document.getElementById('m-venue-id')?.value?.trim() || null;
     const result = await submitReview(
       'm',
       document.getElementById('m-venue-name').value.trim(),
       document.getElementById('m-venue-details').value.trim(),
       document.getElementById('m-section').value.trim(),
       document.getElementById('m-review-text').value.trim(),
-      isAnonymous
+      isAnonymous,
+      knownId
     );
     if (result) {
       closeModal('submit');
