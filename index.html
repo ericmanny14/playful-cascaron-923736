@@ -1588,7 +1588,6 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
     score_postgame: scores[5],
     review_text: reviewText || null,
     is_anonymous: isAnonymous || false,
-    total_score: totalScore,
     photo_urls: photoUrls.length > 0 ? photoUrls : [],
   }).select('id').single();
 
@@ -2302,7 +2301,6 @@ async function updateReview(reviewId) {
     score_amenities:  scores[3],
     score_security:   scores[4],
     score_postgame:   scores[5],
-    total_score:      totalScore,
     review_text: reviewText || null,
     is_anonymous: isAnonymous
   }).eq('id', reviewId).eq('user_id', currentUser.id);
@@ -3461,7 +3459,6 @@ async function _saveAdminScoresheetInner() {
     score_amenities:  clamp(scoresheetData.cat_amenities),
     score_security:   clamp(scoresheetData.cat_security),
     score_postgame:   clamp(scoresheetData.cat_postgame),
-    total_score: totalScore,
     review_text: scoresheetData.written_review || null,
     is_anonymous: false,
   }, { onConflict: 'user_id,venue_id', ignoreDuplicates: false });
