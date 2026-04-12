@@ -1571,7 +1571,10 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
   }
   } // end else (no knownVenueId)
 
-  // Insert review first to get ID for photo upload
+  // Upload photos BEFORE inserting so URLs go straight into the INSERT row
+  const photoUrls = await uploadPhotos(prefix === 'qs' ? 'qs-photo-input' : 'm-photo-input');
+
+  // Insert review (includes photo_urls so no separate UPDATE needed)
   const { data: review, error: re } = await sb.from('reviews').insert({
     user_id: currentUser.id,
     venue_id: venueId,
@@ -1586,19 +1589,10 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
     review_text: reviewText || null,
     is_anonymous: isAnonymous || false,
     total_score: totalScore,
+    photo_urls: photoUrls.length > 0 ? photoUrls : [],
   }).select('id').single();
 
   if (re) { showToast('Error saving review: ' + re.message, 'error'); return false; }
-
-  // Upload photos if any and update review
-  const photoUrls = await uploadPhotos(prefix === 'qs' ? 'qs-photo-input' : 'm-photo-input', review.id);
-  if (photoUrls.length > 0) {
-    const { error: photoUpdateErr } = await sb.from('reviews').update({ photo_urls: photoUrls }).eq('id', review.id);
-    if (photoUpdateErr) {
-      console.error('photo_urls update failed:', photoUpdateErr.message);
-      showToast('⚠️ Photos uploaded but not saved — add a photo_urls text[] column to your reviews table in Supabase.', 'error');
-    }
-  }
 
   // Add passport stamp
   await sb.from('passport_stamps').upsert({
@@ -2530,7 +2524,9 @@ function removePhoto(btn, inputId, previewId, idx) {
   previewPhotos(input, previewId);
 }
 
-async function uploadPhotos(inputId, reviewId) {
+// Upload photos BEFORE inserting a review so the URLs can be included
+// in the INSERT directly — avoids needing a separate UPDATE (and its RLS policy).
+async function uploadPhotos(inputId) {
   try {
     const input = document.getElementById(inputId);
     if (!input?.files?.length) return [];
@@ -2540,10 +2536,11 @@ async function uploadPhotos(inputId, reviewId) {
     for (const file of Array.from(input.files).slice(0, 4)) {
       try {
         const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-        const path = `${currentUser.id}/${reviewId}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        // Use a random slug — no review ID needed since we upload before insert
+        const path = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error } = await sb.storage.from('review-photos').upload(path, file, { upsert: true });
         if (error) {
-          console.error('Photo upload error:', error.message);
+          console.error('Photo upload error:', error.message, error);
           failCount++;
         } else {
           const { data } = sb.storage.from('review-photos').getPublicUrl(path);
@@ -2555,11 +2552,11 @@ async function uploadPhotos(inputId, reviewId) {
       }
     }
     if (failCount > 0 && urls.length === 0) {
-      showToast('⚠️ Photos failed to upload — check that the "review-photos" bucket exists and is public in Supabase.', 'error');
+      showToast('⚠️ Photos failed to upload — make sure the "review-photos" bucket exists and is set to Public in Supabase Storage.', 'error');
     } else if (failCount > 0) {
       showToast(`⚠️ ${failCount} photo(s) failed to upload.`, 'error');
     }
-    // Clear the input + previews after upload attempt
+    // Clear the input + previews
     input.value = '';
     const previewId = inputId === 'qs-photo-input' ? 'qs-photo-previews' : 'm-photo-previews';
     const previews = document.getElementById(previewId);
