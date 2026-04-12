@@ -1582,7 +1582,6 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
     score_security: scores[4],
     score_postgame: scores[5],
     review_text: reviewText || null,
-    photo_urls: [],
     is_anonymous: isAnonymous || false,
   }).select('id').single();
 
@@ -2502,6 +2501,7 @@ function isAdmin() { return currentUser?.id === ADMIN_ID; }
 // ═══════════════════════════════════
 function previewPhotos(input, previewContainerId) {
   const container = document.getElementById(previewContainerId);
+  if (!container) return;
   container.innerHTML = '';
   const files = Array.from(input.files).slice(0, 4);
   files.forEach((file, i) => {
@@ -2526,33 +2526,44 @@ function removePhoto(btn, inputId, previewId, idx) {
 }
 
 async function uploadPhotos(inputId, reviewId) {
-  const input = document.getElementById(inputId);
-  if (!input?.files?.length) return [];
-  const urls = [];
-  let failCount = 0;
-  for (const file of Array.from(input.files).slice(0, 4)) {
-    const ext = file.name.split('.').pop().toLowerCase();
-    const path = `${currentUser.id}/${reviewId}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await sb.storage.from('review-photos').upload(path, file, { upsert: true });
-    if (error) {
-      console.error('Photo upload error:', error.message);
-      failCount++;
-    } else {
-      const { data } = sb.storage.from('review-photos').getPublicUrl(path);
-      urls.push(data.publicUrl);
+  try {
+    const input = document.getElementById(inputId);
+    if (!input?.files?.length) return [];
+    if (!currentUser) return [];
+    const urls = [];
+    let failCount = 0;
+    for (const file of Array.from(input.files).slice(0, 4)) {
+      try {
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `${currentUser.id}/${reviewId}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error } = await sb.storage.from('review-photos').upload(path, file, { upsert: true });
+        if (error) {
+          console.error('Photo upload error:', error.message);
+          failCount++;
+        } else {
+          const { data } = sb.storage.from('review-photos').getPublicUrl(path);
+          urls.push(data.publicUrl);
+        }
+      } catch (fileErr) {
+        console.error('Error uploading file:', fileErr);
+        failCount++;
+      }
     }
+    if (failCount > 0 && urls.length === 0) {
+      showToast('⚠️ Photos failed to upload — check that the "review-photos" bucket exists and is public in Supabase.', 'error');
+    } else if (failCount > 0) {
+      showToast(`⚠️ ${failCount} photo(s) failed to upload.`, 'error');
+    }
+    // Clear the input + previews after upload attempt
+    input.value = '';
+    const previewId = inputId === 'qs-photo-input' ? 'qs-photo-previews' : 'm-photo-previews';
+    const previews = document.getElementById(previewId);
+    if (previews) previews.innerHTML = '';
+    return urls;
+  } catch (err) {
+    console.error('uploadPhotos crashed:', err);
+    return [];
   }
-  if (failCount > 0 && urls.length === 0) {
-    showToast('⚠️ Photos failed to upload. Make sure the "review-photos" storage bucket exists and is public in Supabase.', 'error');
-  } else if (failCount > 0) {
-    showToast(`⚠️ ${failCount} photo(s) failed to upload.`, 'error');
-  }
-  // Clear the input + previews after upload attempt
-  input.value = '';
-  const previewId = inputId === 'qs-photo-input' ? 'qs-photo-previews' : 'm-photo-previews';
-  const previews = document.getElementById(previewId);
-  if (previews) previews.innerHTML = '';
-  return urls;
 }
 
 function openLightbox(src) {
