@@ -1500,62 +1500,69 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
   if (scores.some(s => s === undefined)) { showToast('Please react to all 6 categories', 'error'); return false; }
   if (!venueName) { showToast('Please enter a venue name', 'error'); return false; }
 
-  const totalScore = scores.reduce((a,b) => a+b, 0) / 6;
+  try {
+    const totalScore = scores.reduce((a,b) => a+b, 0) / 6;
 
-  // Find or create venue — use knownVenueId when available to avoid wrong-venue name matches
-  let venueId = null;
-  if (knownVenueId) {
-    venueId = knownVenueId;
-  } else {
-  const { data: existingVenue } = await sb.from('venues').select('id').ilike('name', venueName).maybeSingle();
-  if (existingVenue) {
-    venueId = existingVenue.id;
-  } else {
-    const parts = venueDetails ? venueDetails.split('·') : [];
-    const { data: newVenue, error: ve } = await sb.from('venues').insert({
-      name: venueName,
-      city: parts[0]?.trim() || null,
-      sport: parts[1]?.trim() || null,
-      team: parts[2]?.trim() || null,
+    // Find or create venue — use knownVenueId when available to avoid wrong-venue name matches
+    let venueId = null;
+    if (knownVenueId) {
+      venueId = knownVenueId;
+    } else {
+      const { data: existingVenue } = await sb.from('venues').select('id').ilike('name', venueName).maybeSingle();
+      if (existingVenue) {
+        venueId = existingVenue.id;
+      } else {
+        const parts = venueDetails ? venueDetails.split('·') : [];
+        const { data: newVenue, error: ve } = await sb.from('venues').insert({
+          name: venueName,
+          city: parts[0]?.trim() || null,
+          sport: parts[1]?.trim() || null,
+          team: parts[2]?.trim() || null,
+        }).select('id').single();
+        if (ve) { showToast('Error saving venue: ' + ve.message, 'error'); return false; }
+        venueId = newVenue.id;
+        _venueCache = null;
+      }
+    }
+
+    // Insert review
+    const { data: review, error: re } = await sb.from('reviews').insert({
+      user_id: currentUser.id,
+      venue_id: venueId,
+      venue_name: venueName,
+      section: section || null,
+      score_pregame: scores[0],
+      score_atmosphere: scores[1],
+      score_comfort: scores[2],
+      score_amenities: scores[3],
+      score_security: scores[4],
+      score_postgame: scores[5],
+      review_text: reviewText || null,
+      is_anonymous: isAnonymous || false,
     }).select('id').single();
-    if (ve) { showToast('Error saving venue: ' + ve.message, 'error'); return false; }
-    venueId = newVenue.id;
-    _venueCache = null; // bust browse cache so new venue appears
+
+    if (re) { showToast('Error saving review: ' + re.message, 'error'); return false; }
+
+    // Add passport stamp (non-critical — don't block on failure)
+    try {
+      await sb.from('passport_stamps').upsert({
+        user_id: currentUser.id,
+        venue_id: venueId,
+        review_id: review.id,
+      }, { onConflict: 'user_id,venue_id' });
+
+      const { data: stamps } = await sb.from('passport_stamps').select('id').eq('user_id', currentUser.id);
+      const count = stamps?.length || 0;
+      const level = getScoutLevel(count);
+      await sb.from('profiles').update({ venues_reviewed: count, scout_level: level }).eq('id', currentUser.id);
+    } catch(stampErr) { console.error('stamp/profile update error (non-fatal):', stampErr); }
+
+    return { totalScore, venueId };
+  } catch(err) {
+    console.error('submitReview error:', err);
+    showToast('Error submitting review: ' + (err.message || 'Please try again.'), 'error');
+    return false;
   }
-  } // end else (no knownVenueId)
-
-  // Insert review
-  const { data: review, error: re } = await sb.from('reviews').insert({
-    user_id: currentUser.id,
-    venue_id: venueId,
-    venue_name: venueName,
-    section: section || null,
-    score_pregame: scores[0],
-    score_atmosphere: scores[1],
-    score_comfort: scores[2],
-    score_amenities: scores[3],
-    score_security: scores[4],
-    score_postgame: scores[5],
-    review_text: reviewText || null,
-    is_anonymous: isAnonymous || false,
-  }).select('id').single();
-
-  if (re) { showToast('Error saving review: ' + re.message, 'error'); return false; }
-
-  // Add passport stamp
-  await sb.from('passport_stamps').upsert({
-    user_id: currentUser.id,
-    venue_id: venueId,
-    review_id: review.id,
-  }, { onConflict: 'user_id,venue_id' });
-
-  // Update profile venues_reviewed count
-  const { data: stamps } = await sb.from('passport_stamps').select('id').eq('user_id', currentUser.id);
-  const count = stamps?.length || 0;
-  const level = getScoutLevel(count);
-  await sb.from('profiles').update({ venues_reviewed: count, scout_level: level }).eq('id', currentUser.id);
-
-  return { totalScore, venueId };
 }
 
 async function submitQuickReview() {
@@ -1624,18 +1631,23 @@ async function submitModalReview() {
 // ═══════════════════════════════════
 async function loadReviews(order = 'recent') {
   const el = document.getElementById('reviews-feed');
-  if (!el) return; // element doesn't exist on this page
+  if (!el) return;
   el.innerHTML = '<div class="loading-cards"><span class="spinner"></span> Loading reviews...</div>';
-  let query = sb.from('reviews').select('*, profiles(display_name, username, scout_level)');
-  if (order === 'top') query = query.order('total_score', { ascending: false });
-  else query = query.order('created_at', { ascending: false });
-  query = query.limit(20);
-  const { data, error } = await query;
-  if (error || !data?.length) {
-    el.innerHTML = '<div class="empty-state"><h3>No Reviews Yet</h3><p>Be the first to rate a venue using the 1-4-1 method!</p></div>';
-    return;
+  try {
+    let query = sb.from('reviews').select('*, profiles(display_name, username, scout_level)');
+    if (order === 'top') query = query.order('total_score', { ascending: false });
+    else query = query.order('created_at', { ascending: false });
+    query = query.limit(20);
+    const { data, error } = await query;
+    if (error || !data?.length) {
+      el.innerHTML = '<div class="empty-state"><h3>No Reviews Yet</h3><p>Be the first to rate a venue using the 1-4-1 method!</p></div>';
+      return;
+    }
+    el.innerHTML = data.map((r, i) => buildReviewCard(r, i)).join('');
+  } catch(e) {
+    console.error('loadReviews error:', e);
+    el.innerHTML = '<div class="empty-state"><h3>Error Loading Reviews</h3><p>Please refresh and try again.</p></div>';
   }
-  el.innerHTML = data.map((r, i) => buildReviewCard(r, i)).join('');
 }
 
 function buildReviewCard(r, i) {
@@ -1653,7 +1665,7 @@ function buildReviewCard(r, i) {
     <div class="card-top">
       <div><div class="venue-name" onclick="loadVenueDetail('${r.venue_id}','${r.venue_name}')">${r.venue_name || 'Unknown Venue'}</div>
       <div class="venue-meta">${r.section || ''}</div></div>
-      <div class="score-badge"><div class="s-num">${parseFloat(r.total_score).toFixed(2)}</div><div class="s-lbl">141 Score</div></div>
+      <div class="score-badge"><div class="s-num">${isNaN(parseFloat(r.total_score)) ? '–' : parseFloat(r.total_score).toFixed(2)}</div><div class="s-lbl">141 Score</div></div>
     </div>
     <div class="reaction-chips">
       <div class="r-chip pre-chip"><span class="r-chip-reaction">${em[r.score_pregame]}</span><span class="r-chip-label">Pre-Game</span></div>
@@ -1899,7 +1911,8 @@ async function loadVenueBrowse() {
   }
 
   if (!venues?.length) {
-    document.getElementById('venue-reviews-list').innerHTML = '<div class="empty-state"><h3>No Venues Yet</h3><p>Be the first to add a venue!</p></div>';
+    const _el = document.getElementById('venue-reviews-list');
+    if (_el) _el.innerHTML = '<div class="empty-state"><h3>No Venues Yet</h3><p>Be the first to add a venue!</p></div>';
     return;
   }
 
@@ -1949,28 +1962,30 @@ async function admDeleteVenue(venueId, venueName) {
   if (!venueId) { showToast('No venue selected', 'error'); return; }
   const name = venueName || document.getElementById('venue-detail-name')?.textContent || 'this venue';
   if (!confirm(`Permanently delete "${name}"? This will also delete all associated reviews. This cannot be undone.`)) return;
+  try {
+    // Hide reviews first (fallback if DELETE is RLS-blocked)
+    const { error: revDelErr } = await sb.from('reviews').delete().eq('venue_id', venueId);
+    if (revDelErr) {
+      await sb.from('reviews').update({ is_hidden: true }).eq('venue_id', venueId);
+    }
 
-  // Hide reviews first (fallback if DELETE is RLS-blocked)
-  const { error: revDelErr } = await sb.from('reviews').delete().eq('venue_id', venueId);
-  if (revDelErr) {
-    // Fall back to hiding reviews
-    await sb.from('reviews').update({ is_hidden: true }).eq('venue_id', venueId);
+    const { error } = await sb.from('venues').delete().eq('id', venueId);
+    if (error) { showToast('Error deleting venue: ' + error.message, 'error'); return; }
+
+    // Verify venue is actually gone (RLS may silently no-op)
+    const { data: check } = await sb.from('venues').select('id').eq('id', venueId).maybeSingle();
+    if (check) {
+      showToast('Could not delete — RLS is blocking DELETE. Add an admin DELETE policy in Supabase.', 'error');
+      return;
+    }
+
+    _venueCache = null;
+    showToast('Venue deleted');
+    navToVenueBrowse();
+  } catch(err) {
+    console.error('admDeleteVenue error:', err);
+    showToast('Error deleting venue: ' + (err.message || 'Please try again.'), 'error');
   }
-
-  // Delete the venue
-  const { error } = await sb.from('venues').delete().eq('id', venueId);
-  if (error) { showToast('Error deleting venue: ' + error.message, 'error'); return; }
-
-  // Verify venue is actually gone (RLS may silently no-op)
-  const { data: check } = await sb.from('venues').select('id').eq('id', venueId).maybeSingle();
-  if (check) {
-    showToast('Could not delete venue — RLS is blocking DELETE. Add an admin DELETE policy in Supabase SQL Editor.', 'error');
-    return;
-  }
-
-  _venueCache = null;
-  showToast('Venue deleted');
-  navToVenueBrowse();
 }
 
 function populateVenueSidebar(photos, foodItems) {
@@ -2083,8 +2098,9 @@ async function toggleFollow(userId, btn) {
 
 async function viewUserProfile(userId) {
   openModal('user-profile');
-  document.getElementById('upm-body').innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted)">Loading...</div>';
-
+  const bodyEl = document.getElementById('upm-body');
+  if (bodyEl) bodyEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted)">Loading...</div>';
+  try {
   const [
     { data: profile },
     { count: reviewCount },
@@ -2097,7 +2113,7 @@ async function viewUserProfile(userId) {
     sb.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
   ]);
 
-  if (!profile) { document.getElementById('upm-body').innerHTML = '<p style="color:var(--muted)">Profile not found.</p>'; return; }
+  if (!profile) { if (bodyEl) bodyEl.innerHTML = '<p style="color:var(--muted)">Profile not found.</p>'; return; }
 
   const name = profile.display_name || profile.username || 'Scout';
   const handle = profile.username ? `@${profile.username}` : '';
@@ -2130,6 +2146,10 @@ async function viewUserProfile(userId) {
       if (followCheck) { btn.textContent = 'Following'; btn.classList.add('following'); btn.dataset.following = '1'; }
       else { btn.dataset.following = '0'; }
     }
+  }
+  } catch(err) {
+    console.error('viewUserProfile error:', err);
+    if (bodyEl) bodyEl.innerHTML = '<p style="color:var(--muted)">Error loading profile. Please try again.</p>';
   }
 }
 
@@ -2252,40 +2272,50 @@ async function updateReview(reviewId) {
 // STATS BAR
 // ═══════════════════════════════════
 async function loadStats() {
-  const [{ count: vCount }, { count: rCount }, { count: mCount }, { data: stateData }] = await Promise.all([
-    sb.from('venues').select('*', { count: 'exact', head: true }),
-    sb.from('reviews').select('*', { count: 'exact', head: true }),
-    sb.from('profiles').select('*', { count: 'exact', head: true }),
-    sb.from('venues').select('state').not('state','is',null),
-  ]);
-  const uniqueStates = new Set(stateData?.map(v => v.state)).size;
-  document.getElementById('stat-venues').textContent = vCount || 0;
-  document.getElementById('stat-reviews').textContent = rCount || 0;
-  document.getElementById('stat-members').textContent = mCount || 0;
-  document.getElementById('stat-states').textContent = uniqueStates || 0;
+  try {
+    const [{ count: vCount }, { count: rCount }, { count: mCount }, { data: stateData }] = await Promise.all([
+      sb.from('venues').select('*', { count: 'exact', head: true }),
+      sb.from('reviews').select('*', { count: 'exact', head: true }),
+      sb.from('profiles').select('*', { count: 'exact', head: true }),
+      sb.from('venues').select('state').not('state','is',null),
+    ]);
+    const uniqueStates = new Set(stateData?.map(v => v.state)).size;
+    const setS = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    setS('stat-venues', vCount || 0);
+    setS('stat-reviews', rCount || 0);
+    setS('stat-members', mCount || 0);
+    setS('stat-states', uniqueStates || 0);
+  } catch(e) { console.error('loadStats error:', e); }
 }
 
 // ═══════════════════════════════════
 // TOP VENUES LEADERBOARD
 // ═══════════════════════════════════
 async function loadTopVenues() {
-  const { data } = await sb.from('reviews').select('venue_id, venue_name, total_score').limit(500);
-  if (!data?.length) return;
-  const map = {};
-  data.forEach(r => {
-    if (!map[r.venue_id]) map[r.venue_id] = { name: r.venue_name, scores: [] };
-    map[r.venue_id].scores.push(parseFloat(r.total_score));
-  });
-  const ranked = Object.entries(map)
-    .map(([id,v]) => ({ id, name: v.name, avg: v.scores.reduce((a,b)=>a+b,0)/v.scores.length }))
-    .sort((a,b) => b.avg - a.avg).slice(0,5);
-  document.getElementById('top-venues-list').innerHTML = ranked.map((v,i) =>
-    `<div class="lb-item" onclick="loadVenueDetail('${v.id}','${v.name}')">
-      <div class="lb-rank">#${i+1}</div>
-      <div class="lb-info"><div class="lb-name">${v.name}</div></div>
-      <div class="lb-sc">${v.avg.toFixed(2)}</div>
-    </div>`
-  ).join('');
+  try {
+    const { data } = await sb.from('reviews').select('venue_id, venue_name, total_score').limit(500);
+    if (!data?.length) return;
+    const map = {};
+    data.forEach(r => {
+      const score = parseFloat(r.total_score);
+      if (isNaN(score)) return; // skip reviews with no score
+      if (!map[r.venue_id]) map[r.venue_id] = { name: r.venue_name, scores: [] };
+      map[r.venue_id].scores.push(score);
+    });
+    const ranked = Object.entries(map)
+      .filter(([,v]) => v.scores.length > 0)
+      .map(([id,v]) => ({ id, name: v.name, avg: v.scores.reduce((a,b)=>a+b,0)/v.scores.length }))
+      .sort((a,b) => b.avg - a.avg).slice(0,5);
+    const el = document.getElementById('top-venues-list');
+    if (!el) return;
+    el.innerHTML = ranked.map((v,i) =>
+      `<div class="lb-item" onclick="loadVenueDetail('${v.id}','${v.name.replace(/'/g,"\\'")}')">
+        <div class="lb-rank">#${i+1}</div>
+        <div class="lb-info"><div class="lb-name">${v.name}</div></div>
+        <div class="lb-sc">${v.avg.toFixed(2)}</div>
+      </div>`
+    ).join('');
+  } catch(e) { console.error('loadTopVenues error:', e); }
 }
 
 // ═══════════════════════════════════
