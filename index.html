@@ -2923,13 +2923,19 @@ async function saveAdminVenue() {
     };
 
     const dbCall = id
-      ? sb.from('venues').update(payload).eq('id', id)
-      : sb.from('venues').insert(payload);
+      ? sb.from('venues').update(payload).eq('id', id).select('id')
+      : sb.from('venues').insert(payload).select('id');
 
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Request timed out — check Supabase RLS policies for venues')), 8000));
 
-    const { error } = await Promise.race([dbCall, timeout]);
+    const { data: saved, error } = await Promise.race([dbCall, timeout]);
     if (error) { _venueCache = null; showToast('Save error: ' + error.message, 'error'); return; }
+    // If no rows returned, RLS silently blocked the write
+    if (!saved?.length) {
+      _venueCache = null;
+      showToast('❌ Save blocked by Supabase RLS — add an admin UPDATE policy for the venues table', 'error');
+      return;
+    }
 
     _venueCache = null;
     showToast('✅ Venue saved!');
@@ -3293,17 +3299,22 @@ async function _saveAdminScoresheetInner() {
   };
 
   // Only update admin_scoresheet (JSONB) — the display reads everything from there.
-  // Avoid updating separate columns that may not exist in the schema.
+  // .select('id') lets us detect silent RLS blocks (0 rows returned = blocked).
   const dbCall = sb.from('venues')
     .update({ admin_scoresheet: scoresheetData })
-    .eq('id', currentVenueId);
+    .eq('id', currentVenueId)
+    .select('id');
 
   const timeout = new Promise((_, rej) =>
     setTimeout(() => rej(new Error('Save timed out — check Supabase RLS UPDATE policy for venues')), 8000)
   );
 
-  const { error } = await Promise.race([dbCall, timeout]);
+  const { data: saved, error } = await Promise.race([dbCall, timeout]);
   if (error) { showToast('Error saving: ' + error.message, 'error'); return; }
+  if (!saved?.length) {
+    showToast('❌ Save blocked by Supabase RLS — add an admin UPDATE policy for the venues table', 'error');
+    return;
+  }
 
   // Also upsert a record in reviews table so it appears on admin's profile page
   const clamp = v => v == null ? null : Math.min(5, Math.max(3, Math.round(v)));
