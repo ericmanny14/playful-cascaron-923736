@@ -1365,44 +1365,47 @@ function handleReviewClick() {
 // AUTH
 // ═══════════════════════════════════
 async function signInWithGoogle() {
-  const { error } = await sb.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: window.location.origin + window.location.pathname,
-      queryParams: {
-        access_type: 'offline',
-        prompt: 'consent',
+  try {
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + window.location.pathname,
+        queryParams: { access_type: 'offline', prompt: 'consent' }
       }
-    }
-  });
-  if (error) showToast('Google sign-in error: ' + error.message, 'error');
+    });
+    if (error) showToast('Google sign-in error: ' + error.message, 'error');
+  } catch(e) { showToast('Google sign-in error: ' + e.message, 'error'); }
 }
 
 async function signUp() {
   const btn = document.getElementById('signup-btn');
-  const name = document.getElementById('signup-name').value.trim();
-  const email = document.getElementById('signup-email').value.trim();
-  const pass = document.getElementById('signup-password').value;
+  const name = document.getElementById('signup-name')?.value.trim();
+  const email = document.getElementById('signup-email')?.value.trim();
+  const pass = document.getElementById('signup-password')?.value;
   if (!email || !pass || !name) { showToast('Please fill in all fields', 'error'); return; }
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Creating account...';
-  const { data, error } = await sb.auth.signUp({ email, password: pass, options: { data: { display_name: name } } });
-  btn.disabled = false; btn.textContent = 'Create Account';
-  if (error) { showToast(error.message, 'error'); return; }
-  showToast('✅ Account created! Check your email to confirm.', 'success');
-  closeModal('auth');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Creating account...'; }
+  try {
+    const { error } = await sb.auth.signUp({ email, password: pass, options: { data: { display_name: name } } });
+    if (error) { showToast(error.message, 'error'); return; }
+    showToast('✅ Account created! Check your email to confirm.', 'success');
+    closeModal('auth');
+  } catch(e) { showToast('Sign-up error: ' + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; } }
 }
 
 async function signIn() {
   const btn = document.getElementById('signin-btn');
-  const email = document.getElementById('signin-email').value.trim();
-  const pass = document.getElementById('signin-password').value;
+  const email = document.getElementById('signin-email')?.value.trim();
+  const pass = document.getElementById('signin-password')?.value;
   if (!email || !pass) { showToast('Enter your email and password', 'error'); return; }
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Signing in...';
-  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
-  btn.disabled = false; btn.textContent = 'Sign In';
-  if (error) { showToast(error.message, 'error'); return; }
-  closeModal('auth');
-  showToast('👋 Welcome back!');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Signing in...'; }
+  try {
+    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) { showToast(error.message, 'error'); return; }
+    closeModal('auth');
+    showToast('👋 Welcome back!');
+  } catch(e) { showToast('Sign-in error: ' + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; } }
 }
 
 async function signOut() {
@@ -2068,41 +2071,43 @@ function searchScouts(query) {
 
 async function refreshFollowButtons(userIds) {
   if (!currentUser || !userIds.length) return;
-  const { data } = await sb.from('follows').select('following_id').eq('follower_id', currentUser.id).in('following_id', userIds);
-  const followingSet = new Set((data || []).map(r => r.following_id));
-  userIds.forEach(uid => {
-    const btn = document.getElementById(`follow-btn-${uid}`);
-    if (!btn) return;
-    if (followingSet.has(uid)) {
-      btn.textContent = 'Following';
-      btn.classList.add('following');
-      btn.dataset.following = '1';
-    } else {
-      btn.textContent = 'Follow';
-      btn.classList.remove('following');
-      btn.dataset.following = '0';
-    }
-  });
+  try {
+    const { data } = await sb.from('follows').select('following_id').eq('follower_id', currentUser.id).in('following_id', userIds);
+    const followingSet = new Set((data || []).map(r => r.following_id));
+    userIds.forEach(uid => {
+      const btn = document.getElementById(`follow-btn-${uid}`);
+      if (!btn) return;
+      if (followingSet.has(uid)) {
+        btn.textContent = 'Following'; btn.classList.add('following'); btn.dataset.following = '1';
+      } else {
+        btn.textContent = 'Follow'; btn.classList.remove('following'); btn.dataset.following = '0';
+      }
+    });
+  } catch(e) { console.error('refreshFollowButtons error:', e); }
 }
 
 async function toggleFollow(userId, btn) {
   if (!currentUser) { openModal('auth'); return; }
-  const isFollowing = btn.dataset.following === '1';
-  if (isFollowing) {
-    const { error } = await sb.from('follows').delete().eq('follower_id', currentUser.id).eq('following_id', userId);
-    if (error) { showToast('Error: ' + error.message, 'error'); return; }
-    btn.textContent = 'Follow';
-    btn.classList.remove('following');
-    btn.dataset.following = '0';
-  } else {
-    const { error } = await sb.from('follows').insert({ follower_id: currentUser.id, following_id: userId });
-    if (error) { showToast('Error: ' + error.message, 'error'); return; }
-    btn.textContent = 'Following';
-    btn.classList.add('following');
-    btn.dataset.following = '1';
-  }
-  // Refresh profile stats
-  loadProfile();
+  try {
+    const isFollowing = btn.dataset.following === '1';
+    if (isFollowing) {
+      const { error } = await sb.from('follows').delete().eq('follower_id', currentUser.id).eq('following_id', userId);
+      if (error) { showToast('Error: ' + error.message, 'error'); return; }
+      btn.textContent = 'Follow'; btn.classList.remove('following'); btn.dataset.following = '0';
+    } else {
+      const { error } = await sb.from('follows').insert({ follower_id: currentUser.id, following_id: userId });
+      if (error) { showToast('Error: ' + error.message, 'error'); return; }
+      btn.textContent = 'Following'; btn.classList.add('following'); btn.dataset.following = '1';
+    }
+    loadProfile();
+  } catch(e) { showToast('Error updating follow: ' + e.message, 'error'); }
+}
+
+async function toggleFollowModal(userId) {
+  try {
+    const btn = document.getElementById('upm-follow-btn');
+    if (btn) await toggleFollow(userId, btn);
+  } catch(e) { console.error('toggleFollowModal error:', e); }
 }
 
 async function viewUserProfile(userId) {
@@ -2160,11 +2165,6 @@ async function viewUserProfile(userId) {
     console.error('viewUserProfile error:', err);
     if (bodyEl) bodyEl.innerHTML = '<p style="color:var(--muted)">Error loading profile. Please try again.</p>';
   }
-}
-
-async function toggleFollowModal(userId) {
-  const btn = document.getElementById('upm-follow-btn');
-  if (btn) await toggleFollow(userId, btn);
 }
 
 // ═══════════════════════════════════
@@ -2453,27 +2453,34 @@ async function loadProfile() {
 
 async function saveProfile() {
   if (!currentUser) return;
-  const displayName = document.getElementById('edit-display-name').value.trim();
-  const username = document.getElementById('edit-username').value.trim().replace('@','');
-  const bio = document.getElementById('edit-bio').value.trim();
-  const { error } = await sb.from('profiles').update({ display_name: displayName, username, bio }).eq('id', currentUser.id);
-  if (error) { showToast('Error saving: ' + error.message, 'error'); return; }
-  showToast('✅ Profile saved!');
-  loadProfile();
+  const btn = document.querySelector('[onclick="saveProfile()"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const displayName = document.getElementById('edit-display-name')?.value.trim() || '';
+    const username = document.getElementById('edit-username')?.value.trim().replace('@','') || '';
+    const bio = document.getElementById('edit-bio')?.value.trim() || '';
+    const { error } = await sb.from('profiles').update({ display_name: displayName, username, bio }).eq('id', currentUser.id);
+    if (error) { showToast('Error saving: ' + error.message, 'error'); return; }
+    showToast('✅ Profile saved!');
+    loadProfile();
+  } catch(e) { showToast('Error saving profile: ' + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'Save Changes'; } }
 }
 
 // ═══════════════════════════════════
 // LIKE
 // ═══════════════════════════════════
 async function likeReview(btn, reviewId) {
-  const n = parseInt(btn.textContent.split(' ')[1]) || 0;
-  if (btn.dataset.liked) {
-    btn.textContent = '♡ ' + (n-1); btn.style.color = ''; btn.dataset.liked = '';
-    await sb.from('reviews').update({ likes: n-1 }).eq('id', reviewId);
-  } else {
-    btn.textContent = '♥ ' + (n+1); btn.style.color = 'var(--blue-light)'; btn.dataset.liked = '1';
-    await sb.from('reviews').update({ likes: n+1 }).eq('id', reviewId);
-  }
+  try {
+    const n = parseInt(btn.textContent.split(' ')[1]) || 0;
+    if (btn.dataset.liked) {
+      btn.textContent = '♡ ' + (n-1); btn.style.color = ''; btn.dataset.liked = '';
+      await sb.from('reviews').update({ likes: n-1 }).eq('id', reviewId);
+    } else {
+      btn.textContent = '♥ ' + (n+1); btn.style.color = 'var(--blue-light)'; btn.dataset.liked = '1';
+      await sb.from('reviews').update({ likes: n+1 }).eq('id', reviewId);
+    }
+  } catch(e) { console.error('likeReview error:', e); }
 }
 
 // ═══════════════════════════════════
@@ -2490,27 +2497,25 @@ function isAdmin() { return currentUser?.id === ADMIN_ID; }
 // ═══════════════════════════════════
 async function saveAdminReview() {
   if (!isAdmin() || !currentVenueId) return;
-  const text = document.getElementById('admin-text-input').value.trim();
-  const videoUrl = document.getElementById('admin-video-input').value.trim();
-  const reviewerName = document.getElementById('admin-name-input').value.trim() || '141 venn-U Official';
+  try {
+    const text = document.getElementById('admin-text-input')?.value.trim() || null;
+    const videoUrl = document.getElementById('admin-video-input')?.value.trim() || '';
+    let embedUrl = null;
+    if (videoUrl) {
+      const match = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+      if (match) embedUrl = `https://www.youtube.com/embed/${match[1]}`;
+    }
 
-  // Convert YouTube URL to embed URL
-  let embedUrl = null;
-  if (videoUrl) {
-    const match = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-    if (match) embedUrl = `https://www.youtube.com/embed/${match[1]}`;
-  }
+    // Merge into existing admin_scoresheet JSONB — only write columns that exist
+    const { data: existing } = await sb.from('venues').select('admin_scoresheet').eq('id', currentVenueId).single();
+    const merged = { ...(existing?.admin_scoresheet || {}), written_review: text, video_url: embedUrl };
 
-  const { error } = await sb.from('venues').update({
-    admin_review_text: text || null,
-    admin_review_video: embedUrl || null,
-    admin_review_date: new Date().toISOString(),
-    admin_reviewer_name: reviewerName,
-  }).eq('id', currentVenueId);
-
-  if (error) { showToast('Error saving: ' + error.message, 'error'); return; }
-  showToast('✅ Official review saved!');
-  loadAdminSpotlight(currentVenueId);
+    const { error } = await sb.from('venues').update({ admin_scoresheet: merged }).eq('id', currentVenueId);
+    if (error) { showToast('Error saving: ' + error.message, 'error'); return; }
+    showToast('✅ Official review saved!');
+    _venueCache = null;
+    loadAdminSpotlight(currentVenueId);
+  } catch(e) { showToast('Error saving review: ' + e.message, 'error'); }
 }
 
 async function loadAdminSpotlight(venueId) {
@@ -2983,16 +2988,22 @@ async function admLoadReviews(filter, btn) {
 }
 
 async function admTogglePin(id, pin, btn) {
-  await sb.from('reviews').update({ is_pinned: pin }).eq('id', id);
-  showToast(pin ? '📌 Review pinned!' : 'Review unpinned');
-  btn.textContent = pin ? '📌 Unpin' : '📌 Pin to Top';
-  admLoadReviews('all').catch(e => {});
+  try {
+    const { error } = await sb.from('reviews').update({ is_pinned: pin }).eq('id', id);
+    if (error) { showToast('Error: ' + error.message, 'error'); return; }
+    showToast(pin ? '📌 Review pinned!' : 'Review unpinned');
+    if (btn) btn.textContent = pin ? '📌 Unpin' : '📌 Pin to Top';
+    admLoadReviews('all').catch(e => {});
+  } catch(e) { showToast('Error pinning review: ' + e.message, 'error'); }
 }
 
 async function admToggleHide(id, hide, btn) {
-  await sb.from('reviews').update({ is_hidden: hide }).eq('id', id);
-  showToast(hide ? '🙈 Review hidden from feed' : '👁 Review visible again');
-  admLoadReviews('all');
+  try {
+    const { error } = await sb.from('reviews').update({ is_hidden: hide }).eq('id', id);
+    if (error) { showToast('Error: ' + error.message, 'error'); return; }
+    showToast(hide ? '🙈 Review hidden from feed' : '👁 Review visible again');
+    admLoadReviews('all').catch(e => {});
+  } catch(e) { showToast('Error hiding review: ' + e.message, 'error'); }
 }
 
 function admDeleteReviewCard(id, btn) {
