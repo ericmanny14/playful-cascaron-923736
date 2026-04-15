@@ -2806,18 +2806,19 @@ async function admEditVenue(venueId) {
 }
 
 async function saveAdminVenue() {
-  // Prevent double-saves
   const saveBtn = document.querySelector('[onclick="saveAdminVenue()"]');
   if (saveBtn?.disabled) return;
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
+  // Safety net: always re-enable button after 10s no matter what
+  const safetyTimer = setTimeout(() => {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save Venue'; }
+  }, 10000);
 
   try {
     const id = document.getElementById('adm-venue-edit-id')?.value || '';
     const name = document.getElementById('adv-name')?.value.trim() || '';
     if (!name) { showToast('Venue name is required', 'error'); return; }
-
-    // Tags
-    const tags = Array.from(document.getElementById('adv-tags-wrap')?.querySelectorAll('.tag-pill') || []).map(t => t.dataset.tag);
 
     // YouTube embed
     const videoUrl = document.getElementById('adv-video-url')?.value.trim() || '';
@@ -2828,7 +2829,7 @@ async function saveAdminVenue() {
     }
 
     // Score fields
-    const getS = elId => { const val = parseFloat(document.getElementById(elId)?.value); return isNaN(val) ? null : Math.min(5, Math.max(3, val)); };
+    const getS = elId => { const v = parseFloat(document.getElementById(elId)?.value); return isNaN(v) ? null : Math.min(5, Math.max(3, v)); };
     const catPre = getS('adv-score-pre'), catAtm = getS('adv-score-atm'), catCom = getS('adv-score-com');
     const catAmn = getS('adv-score-amn'), catSec = getS('adv-score-sec'), catPost = getS('adv-score-post');
     let officialScore = getS('adv-official-score');
@@ -2845,16 +2846,15 @@ async function saveAdminVenue() {
       video_url: embedUrl,
     } : null;
 
+    // Only columns that are guaranteed to exist in the venues table
+    // (capacity, tags, description, is_featured excluded — add them in
+    //  Supabase first if you need them)
     const payload = {
       name,
-      city:        document.getElementById('adv-city')?.value.trim()        || null,
-      state:       document.getElementById('adv-state')?.value.trim()       || null,
-      sport:       document.getElementById('adv-sport')?.value.trim()       || null,
-      team:        document.getElementById('adv-team')?.value.trim()        || null,
-      capacity:    parseInt(document.getElementById('adv-capacity')?.value) || null,
-      description: document.getElementById('adv-description')?.value.trim() || null,
-      tags,
-      is_featured:         document.getElementById('adv-featured')?.checked || false,
+      city:  document.getElementById('adv-city')?.value.trim()  || null,
+      state: document.getElementById('adv-state')?.value.trim() || null,
+      sport: document.getElementById('adv-sport')?.value.trim() || null,
+      team:  document.getElementById('adv-team')?.value.trim()  || null,
       admin_review_text:   document.getElementById('adv-review-body')?.innerHTML || null,
       admin_review_video:  embedUrl,
       admin_reviewer_name: document.getElementById('adv-reviewer-name')?.value.trim() || '141 venn-U Official',
@@ -2862,14 +2862,14 @@ async function saveAdminVenue() {
       ...(scoresheetPayload && { admin_scoresheet: scoresheetPayload }),
     };
 
-    // Single DB call — no file uploads (removed to prevent hangs)
-    if (id) {
-      const { error } = await sb.from('venues').update(payload).eq('id', id);
-      if (error) { showToast('Error saving: ' + error.message, 'error'); return; }
-    } else {
-      const { error } = await sb.from('venues').insert(payload);
-      if (error) { showToast('Error creating venue: ' + error.message, 'error'); return; }
-    }
+    const dbCall = id
+      ? sb.from('venues').update(payload).eq('id', id)
+      : sb.from('venues').insert(payload);
+
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Request timed out — check Supabase RLS policies for venues')), 8000));
+
+    const { error } = await Promise.race([dbCall, timeout]);
+    if (error) { showToast('Save error: ' + error.message, 'error'); return; }
 
     _venueCache = null;
     showToast('✅ Venue saved!');
@@ -2878,9 +2878,10 @@ async function saveAdminVenue() {
     if (formEl) formEl.style.display = 'none';
 
   } catch(e) {
-    console.error('saveAdminVenue:', e);
-    showToast('Error saving venue: ' + e.message, 'error');
+    console.error('saveAdminVenue error:', e);
+    showToast(e.message || 'Error saving venue', 'error');
   } finally {
+    clearTimeout(safetyTimer);
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save Venue'; }
   }
 }
