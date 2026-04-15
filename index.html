@@ -3244,12 +3244,24 @@ async function saveAdminScoresheet() {
   if (!currentVenueId) { showToast('Open a specific venue first, then save', 'error'); return; }
   const btn = document.querySelector('[onclick="saveAdminScoresheet()"]');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…'; }
-  try { await _saveAdminScoresheetInner(); }
-  catch(e) { showToast('Error: ' + e.message, 'error'); }
-  finally { if (btn) { btn.disabled = false; btn.innerHTML = '💾 Publish Official Review'; } }
-}
-async function _saveAdminScoresheetInner() {
 
+  // Safety net: always re-enable button after 12s no matter what
+  const safetyTimer = setTimeout(() => {
+    if (btn) { btn.disabled = false; btn.innerHTML = '💾 Publish Official Review'; }
+  }, 12000);
+
+  try {
+    await _saveAdminScoresheetInner();
+  } catch(e) {
+    console.error('saveAdminScoresheet error:', e);
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    clearTimeout(safetyTimer);
+    if (btn) { btn.disabled = false; btn.innerHTML = '💾 Publish Official Review'; }
+  }
+}
+
+async function _saveAdminScoresheetInner() {
   const scoreVal = parseFloat(document.getElementById('admin-manual-score')?.value);
   const totalScore = isNaN(scoreVal) ? null : Math.min(5, Math.max(3, scoreVal));
 
@@ -3276,36 +3288,40 @@ async function _saveAdminScoresheetInner() {
     food_items: foodItems,
   };
 
-  const { error } = await sb.from('venues').update({
-    admin_scoresheet: scoresheetData,
-    admin_review_text: document.getElementById('admin-written-review')?.innerHTML || null,
-    admin_review_video: embedUrl,
-    admin_review_date: new Date().toISOString(),
-    admin_reviewer_name: '141 venn-U Official',
-  }).eq('id', currentVenueId);
+  // Only update admin_scoresheet (JSONB) — the display reads everything from there.
+  // Avoid updating separate columns that may not exist in the schema.
+  const dbCall = sb.from('venues')
+    .update({ admin_scoresheet: scoresheetData })
+    .eq('id', currentVenueId);
 
+  const timeout = new Promise((_, rej) =>
+    setTimeout(() => rej(new Error('Save timed out — check Supabase RLS UPDATE policy for venues')), 8000)
+  );
+
+  const { error } = await Promise.race([dbCall, timeout]);
   if (error) { showToast('Error saving: ' + error.message, 'error'); return; }
 
   // Also upsert a record in reviews table so it appears on admin's profile page
   const clamp = v => v == null ? null : Math.min(5, Math.max(3, Math.round(v)));
   const vname = document.getElementById('venue-detail-name')?.textContent || '';
-  try { await sb.from('reviews').upsert({
-    user_id: currentUser.id,
-    venue_id: currentVenueId,
-    venue_name: vname,
-    score_pregame:    clamp(scoresheetData.cat_pregame),
-    score_atmosphere: clamp(scoresheetData.cat_atmosphere),
-    score_comfort:    clamp(scoresheetData.cat_comfort),
-    score_amenities:  clamp(scoresheetData.cat_amenities),
-    score_security:   clamp(scoresheetData.cat_security),
-    score_postgame:   clamp(scoresheetData.cat_postgame),
-    review_text: scoresheetData.written_review || null,
-    is_anonymous: false,
-  }, { onConflict: 'user_id,venue_id', ignoreDuplicates: false }); } catch(e) { console.warn('admin review upsert skipped:', e.message); }
+  try {
+    await sb.from('reviews').upsert({
+      user_id: currentUser.id,
+      venue_id: currentVenueId,
+      venue_name: vname,
+      score_pregame:    clamp(scoresheetData.cat_pregame),
+      score_atmosphere: clamp(scoresheetData.cat_atmosphere),
+      score_comfort:    clamp(scoresheetData.cat_comfort),
+      score_amenities:  clamp(scoresheetData.cat_amenities),
+      score_security:   clamp(scoresheetData.cat_security),
+      score_postgame:   clamp(scoresheetData.cat_postgame),
+      review_text: scoresheetData.written_review || null,
+      is_anonymous: false,
+    }, { onConflict: 'user_id,venue_id', ignoreDuplicates: false });
+  } catch(e) { console.warn('admin review upsert skipped (non-fatal):', e.message); }
 
-  _venueCache = null; // bust cache so new score appears in browse
+  _venueCache = null;
   showToast('✅ Official review published!');
-  // Reload full venue detail so header, display and editor all reflect saved data
   await loadVenueDetail(currentVenueId, vname);
 } // end _saveAdminScoresheetInner
 
