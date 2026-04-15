@@ -1404,16 +1404,19 @@ async function signIn() {
 }
 
 async function signOut() {
-  // Close admin dashboard if open before auth state changes
   const dash = document.getElementById('admin-dash');
   if (dash) dash.classList.remove('open');
   currentUser = null; currentProfile = null;
+  try { await sb.auth.signOut({ scope: 'local' }); } catch(e) {}
+  // Manually clear all Supabase auth keys from localStorage
+  // so the session can never auto-restore on reload
   try {
-    await sb.auth.signOut();
-  } catch (err) {
-    console.error('signOut error:', err);
-  }
-  // Force a full page reload — cleanest way to reset all state
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('sb-') || k.toLowerCase().includes('supabase')) {
+        localStorage.removeItem(k);
+      }
+    });
+  } catch(e) {}
   window.location.href = window.location.pathname;
 }
 
@@ -2655,11 +2658,12 @@ document.addEventListener('click', e => {
 // ADMIN DASHBOARD
 // ═══════════════════════════════════
 function openAdminDash() {
-  document.getElementById('admin-dash').classList.add('open');
-  admLoadOverview();
-  admLoadVenueList('');
-  admLoadReviews('all');
-  admLoadUsers();
+  const dash = document.getElementById('admin-dash');
+  if (dash) dash.classList.add('open');
+  admLoadOverview().catch(e => console.error('admLoadOverview:', e));
+  admLoadVenueList('').catch(e => console.error('admLoadVenueList:', e));
+  admLoadReviews('all').catch(e => console.error('admLoadReviews:', e));
+  admLoadUsers().catch(e => console.error('admLoadUsers:', e));
 }
 function closeAdminDash() { document.getElementById('admin-dash').classList.remove('open'); }
 
@@ -2677,34 +2681,42 @@ function switchAdminTab(tab, btn) {
 }
 
 async function admLoadOverview() {
+  try {
   const [{ count: vc }, { count: rc }, { count: uc }] = await Promise.all([
     sb.from('venues').select('*', { count: 'exact', head: true }),
     sb.from('reviews').select('*', { count: 'exact', head: true }),
     sb.from('profiles').select('*', { count: 'exact', head: true }),
   ]);
-  document.getElementById('adm-stat-venues').textContent = vc || 0;
-  document.getElementById('adm-stat-reviews').textContent = rc || 0;
-  document.getElementById('adm-stat-users').textContent = uc || 0;
+  const sv = document.getElementById('adm-stat-venues'); if (sv) sv.textContent = vc || 0;
+  const sr = document.getElementById('adm-stat-reviews'); if (sr) sr.textContent = rc || 0;
+  const su = document.getElementById('adm-stat-users'); if (su) su.textContent = uc || 0;
   // Recent reviews
   const { data: recent } = await sb.from('reviews')
     .select('*, profiles(display_name)')
     .order('created_at', { ascending: false }).limit(5);
-  document.getElementById('adm-recent-reviews').innerHTML = recent?.map(r =>
-    `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">
+  const recentEl = document.getElementById('adm-recent-reviews');
+  if (recentEl) recentEl.innerHTML = recent?.map(r => {
+    const sc = parseFloat(r.total_score);
+    const scStr = isNaN(sc) ? '–' : sc.toFixed(2);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">
       <div><strong>${r.venue_name||'Unknown'}</strong> <span style="color:var(--muted)">by ${r.profiles?.display_name||'anon'}</span></div>
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="background:var(--grad);padding:3px 8px;border-radius:4px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:white">${parseFloat(r.total_score).toFixed(2)}</span>
+        <span style="background:var(--grad);padding:3px 8px;border-radius:4px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:white">${scStr}</span>
         ${r.is_hidden ? '<span class="review-hidden-badge">HIDDEN</span>' : ''}
         ${r.is_pinned ? '<span class="review-pinned-badge">PINNED</span>' : ''}
       </div>
-    </div>`).join('') || '<div style="color:var(--muted)">No reviews yet</div>';
+    </div>`;}).join('') || '<div style="color:var(--muted)">No reviews yet</div>';
+  } catch(e) { console.error('admLoadOverview error:', e); }
 }
 
 async function admLoadVenueList(q) {
+  try {
   let query = sb.from('venues').select('id,name,city,state,sport,team,is_featured').order('name');
   if (q) query = query.ilike('name', `%${q}%`);
   const { data } = await query.limit(50);
-  document.getElementById('adm-venue-list').innerHTML = data?.map(v =>
+  const el = document.getElementById('adm-venue-list');
+  if (!el) return;
+  el.innerHTML = data?.map(v =>
     `<div class="venue-list-item">
       <div style="flex:1;cursor:pointer" onclick="admEditVenue('${v.id}')">
         <div class="venue-list-name">${v.is_featured ? '⭐ ' : ''}${v.name}</div>
@@ -2716,6 +2728,7 @@ async function admLoadVenueList(q) {
           style="background:none;border:1px solid var(--dislike);color:var(--dislike);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer">🗑</button>
       </div>
     </div>`).join('') || '<div style="color:var(--muted);font-size:13px">No venues found</div>';
+  } catch(e) { console.error('admLoadVenueList:', e); }
 }
 
 function admSearchVenues(q) { clearTimeout(venueSearchTimer); venueSearchTimer = setTimeout(() => admLoadVenueList(q), 300); }
@@ -2736,6 +2749,7 @@ function admShowNewVenueForm() {
 }
 
 async function admEditVenue(venueId) {
+  try {
   const { data: v } = await sb.from('venues').select('*').eq('id', venueId).single();
   if (!v) return;
   // Switch to Venues tab so the form is visible
@@ -2786,13 +2800,15 @@ async function admEditVenue(venueId) {
   } else {
     document.getElementById('adv-pdf-current').style.display = 'none';
   }
-  document.getElementById('adm-venue-form').style.display = 'block';
-  document.getElementById('adm-venue-form').scrollIntoView({ behavior: 'smooth' });
+  const formEl = document.getElementById('adm-venue-form');
+  if (formEl) { formEl.style.display = 'block'; formEl.scrollIntoView({ behavior: 'smooth' }); }
+  } catch(e) { console.error('admEditVenue:', e); showToast('Error loading venue data: ' + e.message, 'error'); }
 }
 
 async function saveAdminVenue() {
-  const id = document.getElementById('adm-venue-edit-id').value;
-  const name = document.getElementById('adv-name').value.trim();
+  try {
+  const id = document.getElementById('adm-venue-edit-id')?.value || '';
+  const name = document.getElementById('adv-name')?.value.trim() || '';
   if (!name) { showToast('Venue name is required', 'error'); return; }
 
   // Get tags
@@ -2891,10 +2907,12 @@ async function saveAdminVenue() {
   document.getElementById('adm-venue-form').style.display = 'none';
   // Pre-load venue detail in background so it's fresh when admin closes the dash
   if (venueId) loadVenueDetail(venueId, name).catch(() => {});
+  } catch(e) { console.error('saveAdminVenue:', e); showToast('Error saving venue: ' + e.message, 'error'); }
 }
 
 // ── ADMIN REVIEW MODERATION ──
 async function admLoadReviews(filter, btn) {
+  try {
   if (btn) {
     document.querySelectorAll('#admin-tab-reviews .mod-btn').forEach(b => {
       b.style.background='none'; b.style.borderColor='var(--border)'; b.style.color='var(--muted)';
@@ -2906,6 +2924,7 @@ async function admLoadReviews(filter, btn) {
   if (filter === 'pinned') query = query.eq('is_pinned', true);
   const { data } = await query;
   const el = document.getElementById('adm-reviews-list');
+  if (!el) return;
   if (!data?.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px">No reviews found</div>'; return; }
   el.innerHTML = data.map(r => {
     const em = {3:'👎',4:'👍',5:'❤️'};
@@ -2928,14 +2947,14 @@ async function admLoadReviews(filter, btn) {
       </div>
     </div>`;
   }).join('');
+  } catch(e) { console.error('admLoadReviews:', e); }
 }
 
 async function admTogglePin(id, pin, btn) {
   await sb.from('reviews').update({ is_pinned: pin }).eq('id', id);
   showToast(pin ? '📌 Review pinned!' : 'Review unpinned');
   btn.textContent = pin ? '📌 Unpin' : '📌 Pin to Top';
-  btn.closest('.review-card').querySelector('[class*="review-card"] div').innerHTML;
-  admLoadReviews('all');
+  admLoadReviews('all').catch(e => {});
 }
 
 async function admToggleHide(id, hide, btn) {
@@ -2985,8 +3004,11 @@ async function admDeleteReview(id, btn) {
 
 // ── ADMIN USERS ──
 async function admLoadUsers() {
+  try {
   const { data } = await sb.from('profiles').select('*').order('created_at', { ascending: false }).limit(50);
-  document.getElementById('adm-users-list').innerHTML = data?.map(u =>
+  const el = document.getElementById('adm-users-list');
+  if (!el) return;
+  el.innerHTML = data?.map(u =>
     `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">
       <div style="display:flex;align-items:center;gap:10px">
         <div style="width:32px;height:32px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:white">${(u.display_name||'?')[0].toUpperCase()}</div>
@@ -2997,6 +3019,7 @@ async function admLoadUsers() {
       </div>
       <div style="font-size:11px;color:var(--muted)">${new Date(u.created_at).toLocaleDateString()}</div>
     </div>`).join('') || '<div style="color:var(--muted)">No users yet</div>';
+  } catch(e) { console.error('admLoadUsers:', e); }
 }
 
 // ── TAG SYSTEM ──
