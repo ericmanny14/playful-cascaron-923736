@@ -1286,6 +1286,8 @@ function openModal(name) { document.getElementById('modal-' + name).classList.ad
 function closeModal(name) {
   document.getElementById('modal-' + name).classList.remove('open');
   if (name === 'submit') {
+    // Clear stale reaction scores so next open is always fresh
+    Object.keys(reactions).forEach(k => delete reactions[k]);
     document.getElementById('m-anonymous').checked = false;
     const btn = document.getElementById('modal-submit-btn');
     btn.textContent = 'Publish to 141 venn-U';
@@ -1680,118 +1682,119 @@ function buildReviewCard(r, i) {
 // VENUE DETAIL
 // ═══════════════════════════════════
 async function loadVenueDetail(venueId, venueName) {
+  if (!venueId) { showToast('No venue selected', 'error'); return; }
   currentVenueId = venueId;
   showPage('venue');
-  document.getElementById('venue-141-bar').style.display = '';  // restore bar hidden during browse
-  // Always hide official review display and editor upfront — loadAdminSpotlight restores them
-  const _displayEl = document.getElementById('admin-scoresheet-display');
-  if (_displayEl) { _displayEl.style.display = 'none'; _displayEl.innerHTML = ''; }
-  const _editorEl = document.getElementById('admin-scoresheet-editor');
-  if (_editorEl) _editorEl.style.display = 'none';
-  document.getElementById('venue-detail-name').textContent = venueName || 'Loading...';
 
-  // Run venue + reviews queries in parallel for faster load
-  const [
-    { data: venue, error: venueError },
-    { data: reviews, error }
-  ] = await Promise.all([
-    sb.from('venues').select('*').eq('id', venueId).single(),
-    sb.from('reviews')
-      .select('*, profiles(display_name, username, scout_level)')
-      .eq('venue_id', venueId)
-      .eq('is_hidden', false)
-      .order('is_pinned', { ascending: false })
-      .order('created_at', { ascending: false })
-  ]);
+  // Helper: safely set textContent without crashing if element is missing
+  const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
-  if (venueError || !venue) {
-    showToast('Venue not found', 'error');
-    showPage('home');
-    return;
-  }
+  try {
+    const barEl = document.getElementById('venue-141-bar');
+    if (barEl) barEl.style.display = '';
 
-  if (venue) {
-    document.getElementById('venue-sport-tag').textContent = [venue.sport, venue.team].filter(Boolean).join(' · ') || 'Venue';
-    document.getElementById('venue-detail-meta').textContent = [venue.city, venue.state].filter(Boolean).join(', ');
-    document.getElementById('vd-sport').textContent = venue.sport || '–';
-    document.getElementById('vd-team').textContent = venue.team || '–';
-    document.getElementById('vd-city').textContent = [venue.city, venue.state].filter(Boolean).join(', ') || '–';
-    document.getElementById('vd-cap').textContent = venue.capacity?.toLocaleString() || '–';
-  }
+    const _displayEl = document.getElementById('admin-scoresheet-display');
+    if (_displayEl) { _displayEl.style.display = 'none'; _displayEl.innerHTML = ''; }
+    const _editorEl = document.getElementById('admin-scoresheet-editor');
+    if (_editorEl) _editorEl.style.display = 'none';
 
-  if (error) {
-    showToast('Error loading reviews: ' + error.message, 'error');
-    return;
-  }
+    setEl('venue-detail-name', venueName || 'Loading...');
 
-  // Admin official score (0–10 scale)
-  const adminScore = venue?.admin_scoresheet?.total_score != null
-    ? parseFloat(venue.admin_scoresheet.total_score)
-    : null;
+    // Run venue + reviews queries in parallel
+    const [
+      { data: venue, error: venueError },
+      { data: reviews, error: reviewsError }
+    ] = await Promise.all([
+      sb.from('venues').select('*').eq('id', venueId).single(),
+      sb.from('reviews')
+        .select('*, profiles(display_name, username, scout_level)')
+        .eq('venue_id', venueId)
+        .eq('is_hidden', false)
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false })
+    ]);
 
-  if (!reviews?.length) {
+    if (venueError || !venue) {
+      showToast('Venue not found', 'error');
+      showPage('home');
+      return;
+    }
+
+    setEl('venue-sport-tag', [venue.sport, venue.team].filter(Boolean).join(' · ') || 'Venue');
+    setEl('venue-detail-meta', [venue.city, venue.state].filter(Boolean).join(', '));
+    setEl('vd-sport', venue.sport || '–');
+    setEl('vd-team', venue.team || '–');
+    setEl('vd-city', [venue.city, venue.state].filter(Boolean).join(', ') || '–');
+    setEl('vd-cap', venue.capacity?.toLocaleString() || '–');
+
+    if (reviewsError) {
+      showToast('Error loading reviews: ' + reviewsError.message, 'error');
+      return;
+    }
+
+    const adminScore = venue.admin_scoresheet?.total_score != null
+      ? parseFloat(venue.admin_scoresheet.total_score)
+      : null;
+
+    const pdfCard = document.getElementById('venue-pdf-card');
+    const pdfLink = document.getElementById('venue-pdf-link');
+    if (pdfCard && pdfLink) {
+      if (venue.pdf_url) { pdfLink.href = venue.pdf_url; pdfCard.style.display = 'block'; }
+      else { pdfCard.style.display = 'none'; }
+    }
+
+    if (!reviews?.length) {
+      if (adminScore != null) {
+        setEl('venue-big-score', adminScore.toFixed(2));
+        setEl('venue-review-count', '141 Score · Official Review');
+      } else {
+        setEl('venue-big-score', '–');
+        setEl('venue-review-count', 'No reviews yet');
+      }
+      setEl('vd-revcount', '0');
+      const listEl = document.getElementById('venue-reviews-list');
+      if (listEl) listEl.innerHTML = '<div class="empty-state"><h3>No Reviews Yet</h3><p>Be the first to rate this venue!</p></div>';
+      loadAdminSpotlight(venueId);
+      return;
+    }
+
+    // Safe number parse — treats null/undefined/NaN as 0
+    const safeNum = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+    const avg = field => reviews.reduce((s, r) => s + safeNum(r[field]), 0) / reviews.length;
+    const communityAvg = reviews.reduce((s, r) => s + safeNum(r.total_score), 0) / reviews.length;
+
+    let displayScore, reviewLabel;
     if (adminScore != null) {
-      document.getElementById('venue-big-score').textContent = adminScore.toFixed(2);
-      document.getElementById('venue-review-count').textContent = '141 Score · Official Review';
+      const combined = (communityAvg * reviews.length + adminScore) / (reviews.length + 1);
+      displayScore = combined.toFixed(2);
+      reviewLabel = `141 Score · ${reviews.length} Community + Official`;
     } else {
-      document.getElementById('venue-big-score').textContent = '–';
-      document.getElementById('venue-review-count').textContent = 'No reviews yet';
+      displayScore = communityAvg.toFixed(2);
+      reviewLabel = `141 Score · ${reviews.length} Reviews`;
     }
-    document.getElementById('vd-revcount').textContent = '0';
-    document.getElementById('venue-reviews-list').innerHTML = '<div class="empty-state"><h3>No Reviews Yet</h3><p>Be the first to rate this venue!</p></div>';
-    const _pdfCard = document.getElementById('venue-pdf-card');
-    const _pdfLink = document.getElementById('venue-pdf-link');
-    if (_pdfCard && _pdfLink) {
-      if (venue.pdf_url) { _pdfLink.href = venue.pdf_url; _pdfCard.style.display = 'block'; }
-      else { _pdfCard.style.display = 'none'; }
-    }
+
+    setEl('venue-big-score', displayScore);
+    setEl('venue-review-count', reviewLabel);
+    setEl('vd-revcount', reviews.length);
+
+    const fields = [['pre','score_pregame'],['atm','score_atmosphere'],['com','score_comfort'],['amn','score_amenities'],['sec','score_security'],['post','score_postgame']];
+    const revCount = `${reviews.length} ${reviews.length === 1 ? 'review' : 'reviews'}`;
+    fields.forEach(([id, field]) => {
+      const a = avg(field);
+      const emojiEl = document.getElementById(`vb-${id}-emoji`);
+      const scoreEl = document.getElementById(`vb-${id}-score`);
+      if (emojiEl) emojiEl.textContent = scoreEmoji(a);
+      if (scoreEl) scoreEl.textContent = revCount;
+    });
+
+    const listEl = document.getElementById('venue-reviews-list');
+    if (listEl) listEl.innerHTML = reviews.map((r, i) => buildReviewCard(r, i)).join('');
+
     loadAdminSpotlight(venueId);
-    return;
+  } catch(err) {
+    console.error('loadVenueDetail error:', err);
+    showToast('Error loading venue. Please try again.', 'error');
   }
-
-  // Community avg: use stored total_score directly (avg of 3/4/5 category scores = 3–5 scale)
-  const avg = field => (reviews.reduce((s,r) => s + r[field], 0) / reviews.length);
-  const communityAvg = reviews.reduce((s,r) => s + parseFloat(r.total_score || 0), 0) / reviews.length;
-
-  let displayScore, reviewLabel;
-  if (adminScore != null) {
-    // Both on 3–5 scale — admin counts as one weighted vote
-    const combined = (communityAvg * reviews.length + adminScore) / (reviews.length + 1);
-    displayScore = combined.toFixed(2);
-    reviewLabel = `141 Score · ${reviews.length} Community + Official`;
-  } else {
-    displayScore = communityAvg.toFixed(2);
-    reviewLabel = `141 Score · ${reviews.length} Reviews`;
-  }
-
-  document.getElementById('venue-big-score').textContent = displayScore;
-  document.getElementById('venue-review-count').textContent = reviewLabel;
-  document.getElementById('vd-revcount').textContent = reviews.length;
-
-  const fields = [['pre','score_pregame'],['atm','score_atmosphere'],['com','score_comfort'],['amn','score_amenities'],['sec','score_security'],['post','score_postgame']];
-  const revCount = `${reviews.length} ${reviews.length === 1 ? 'review' : 'reviews'}`;
-  fields.forEach(([id, field]) => {
-    const a = avg(field);
-    document.getElementById(`vb-${id}-emoji`).textContent = scoreEmoji(a);
-    document.getElementById(`vb-${id}-score`).textContent = revCount;
-  });
-
-  document.getElementById('venue-reviews-list').innerHTML = reviews.map((r,i) => buildReviewCard(r,i)).join('');
-
-  // PDF guide
-  const pdfCard = document.getElementById('venue-pdf-card');
-  const pdfLink = document.getElementById('venue-pdf-link');
-  if (pdfCard && pdfLink) {
-    if (venue.pdf_url) {
-      pdfLink.href = venue.pdf_url;
-      pdfCard.style.display = 'block';
-    } else {
-      pdfCard.style.display = 'none';
-    }
-  }
-
-  // Load admin spotlight
-  loadAdminSpotlight(venueId);
 }
 
 // ═══════════════════════════════════
@@ -1867,16 +1870,18 @@ function handleVenueClick(venueId, venueName) {
 // ═══════════════════════════════════
 async function loadVenueBrowse() {
   currentVenueId = null;
-  document.getElementById('venue-detail-name').textContent = 'Browse Venues';
-  document.getElementById('venue-sport-tag').textContent = 'Find & Review Stadiums';
-  document.getElementById('venue-detail-meta').textContent = 'Discover venues near you';
-  document.getElementById('venue-big-score').textContent = '–';
-  document.getElementById('venue-review-count').textContent = 'Explore & Rate';
+  const _setT = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  _setT('venue-detail-name', 'Browse Venues');
+  _setT('venue-sport-tag', 'Find & Review Stadiums');
+  _setT('venue-detail-meta', 'Discover venues near you');
+  _setT('venue-big-score', '–');
+  _setT('venue-review-count', 'Explore & Rate');
 
   // Hide venue-specific elements in browse mode
-  document.getElementById('venue-141-bar').style.display = 'none';
-  document.getElementById('admin-scoresheet-display').style.display = 'none';
-  document.getElementById('admin-scoresheet-editor').style.display = 'none';
+  const _hide = id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
+  _hide('venue-141-bar');
+  _hide('admin-scoresheet-display');
+  _hide('admin-scoresheet-editor');
 
   // Load venue list (with short-lived cache to avoid redundant fetches)
   let venues;
@@ -2218,13 +2223,19 @@ async function updateReview(reviewId) {
 
     if (error) { showToast('Error updating review: ' + error.message, 'error'); return; }
 
+    // Capture currentVenueId before closeModal clears any state
+    const reloadVenueId = currentVenueId;
+    const reloadVenueName = document.getElementById('venue-detail-name')?.textContent || '';
+    const isVenuePage = !!reloadVenueId && document.getElementById('page-venue')?.classList.contains('active');
+    const isProfilePage = document.getElementById('page-profile')?.classList.contains('active');
+
     closeModal('submit');
     showToast('✅ Review updated!');
 
     // Reload whichever page is currently active
-    if (currentVenueId && document.getElementById('page-venue')?.classList.contains('active')) {
-      loadVenueDetail(currentVenueId, document.getElementById('venue-detail-name')?.textContent || '');
-    } else if (document.getElementById('page-profile')?.classList.contains('active')) {
+    if (isVenuePage) {
+      loadVenueDetail(reloadVenueId, reloadVenueName);
+    } else if (isProfilePage) {
       loadProfile();
     } else {
       loadReviews('recent');
