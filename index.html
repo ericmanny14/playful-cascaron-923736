@@ -2806,108 +2806,83 @@ async function admEditVenue(venueId) {
 }
 
 async function saveAdminVenue() {
+  // Prevent double-saves
+  const saveBtn = document.querySelector('[onclick="saveAdminVenue()"]');
+  if (saveBtn?.disabled) return;
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
   try {
-  const id = document.getElementById('adm-venue-edit-id')?.value || '';
-  const name = document.getElementById('adv-name')?.value.trim() || '';
-  if (!name) { showToast('Venue name is required', 'error'); return; }
+    const id = document.getElementById('adm-venue-edit-id')?.value || '';
+    const name = document.getElementById('adv-name')?.value.trim() || '';
+    if (!name) { showToast('Venue name is required', 'error'); return; }
 
-  // Get tags
-  const tags = Array.from(document.getElementById('adv-tags-wrap').querySelectorAll('.tag-pill')).map(t => t.dataset.tag);
+    // Tags
+    const tags = Array.from(document.getElementById('adv-tags-wrap')?.querySelectorAll('.tag-pill') || []).map(t => t.dataset.tag);
 
-  // YouTube embed
-  const videoUrl = document.getElementById('adv-video-url').value.trim();
-  let embedUrl = null;
-  if (videoUrl) {
-    const m = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-    if (m) embedUrl = `https://www.youtube.com/embed/${m[1]}`;
+    // YouTube embed
+    const videoUrl = document.getElementById('adv-video-url')?.value.trim() || '';
+    let embedUrl = null;
+    if (videoUrl) {
+      const m = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+      if (m) embedUrl = `https://www.youtube.com/embed/${m[1]}`;
+    }
+
+    // Score fields
+    const getS = elId => { const val = parseFloat(document.getElementById(elId)?.value); return isNaN(val) ? null : Math.min(5, Math.max(3, val)); };
+    const catPre = getS('adv-score-pre'), catAtm = getS('adv-score-atm'), catCom = getS('adv-score-com');
+    const catAmn = getS('adv-score-amn'), catSec = getS('adv-score-sec'), catPost = getS('adv-score-post');
+    let officialScore = getS('adv-official-score');
+    if (officialScore == null) {
+      const cats = [catPre, catAtm, catCom, catAmn, catSec, catPost].filter(c => c != null);
+      if (cats.length) officialScore = cats.reduce((a, b) => a + b, 0) / cats.length;
+    }
+    const hasScoreData = officialScore != null || catPre != null;
+    const scoresheetPayload = hasScoreData ? {
+      total_score: officialScore,
+      cat_pregame: catPre, cat_atmosphere: catAtm, cat_comfort: catCom,
+      cat_amenities: catAmn, cat_security: catSec, cat_postgame: catPost,
+      written_review: document.getElementById('adv-review-body')?.innerHTML || null,
+      video_url: embedUrl,
+    } : null;
+
+    const payload = {
+      name,
+      city:        document.getElementById('adv-city')?.value.trim()        || null,
+      state:       document.getElementById('adv-state')?.value.trim()       || null,
+      sport:       document.getElementById('adv-sport')?.value.trim()       || null,
+      team:        document.getElementById('adv-team')?.value.trim()        || null,
+      capacity:    parseInt(document.getElementById('adv-capacity')?.value) || null,
+      description: document.getElementById('adv-description')?.value.trim() || null,
+      tags,
+      is_featured:         document.getElementById('adv-featured')?.checked || false,
+      admin_review_text:   document.getElementById('adv-review-body')?.innerHTML || null,
+      admin_review_video:  embedUrl,
+      admin_reviewer_name: document.getElementById('adv-reviewer-name')?.value.trim() || '141 venn-U Official',
+      admin_review_date:   new Date().toISOString(),
+      ...(scoresheetPayload && { admin_scoresheet: scoresheetPayload }),
+    };
+
+    // Single DB call — no file uploads (removed to prevent hangs)
+    if (id) {
+      const { error } = await sb.from('venues').update(payload).eq('id', id);
+      if (error) { showToast('Error saving: ' + error.message, 'error'); return; }
+    } else {
+      const { error } = await sb.from('venues').insert(payload);
+      if (error) { showToast('Error creating venue: ' + error.message, 'error'); return; }
+    }
+
+    _venueCache = null;
+    showToast('✅ Venue saved!');
+    admLoadVenueList('').catch(() => {});
+    const formEl = document.getElementById('adm-venue-form');
+    if (formEl) formEl.style.display = 'none';
+
+  } catch(e) {
+    console.error('saveAdminVenue:', e);
+    showToast('Error saving venue: ' + e.message, 'error');
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save Venue'; }
   }
-
-  // Build admin scoresheet from score fields
-  const getS = id => { const val = parseFloat(document.getElementById(id)?.value); return isNaN(val) ? null : Math.min(5, Math.max(3, val)); };
-  const catPre  = getS('adv-score-pre');
-  const catAtm  = getS('adv-score-atm');
-  const catCom  = getS('adv-score-com');
-  const catAmn  = getS('adv-score-amn');
-  const catSec  = getS('adv-score-sec');
-  const catPost = getS('adv-score-post');
-  let officialScore = getS('adv-official-score');
-  // Auto-calculate from categories if no manual override
-  if (officialScore == null) {
-    const cats = [catPre, catAtm, catCom, catAmn, catSec, catPost].filter(c => c != null);
-    if (cats.length > 0) officialScore = cats.reduce((a, b) => a + b, 0) / cats.length;
-  }
-  const hasScoreData = officialScore != null || catPre != null;
-  const scoresheetPayload = hasScoreData ? {
-    total_score: officialScore,
-    cat_pregame:    catPre,
-    cat_atmosphere: catAtm,
-    cat_comfort:    catCom,
-    cat_amenities:  catAmn,
-    cat_security:   catSec,
-    cat_postgame:   catPost,
-    written_review: document.getElementById('adv-review-body').innerHTML || null,
-    video_url: embedUrl,
-  } : null;
-
-  const reviewText = document.getElementById('adv-review-body').innerHTML || null;
-  const payload = {
-    name,
-    city: document.getElementById('adv-city').value.trim() || null,
-    state: document.getElementById('adv-state').value.trim() || null,
-    sport: document.getElementById('adv-sport').value.trim() || null,
-    team: document.getElementById('adv-team').value.trim() || null,
-    capacity: parseInt(document.getElementById('adv-capacity').value) || null,
-    description: document.getElementById('adv-description').value.trim() || null,
-    tags,
-    is_featured: document.getElementById('adv-featured').checked,
-    admin_review_text: reviewText,
-    admin_review_video: embedUrl,
-    admin_reviewer_name: document.getElementById('adv-reviewer-name').value.trim() || '141 venn-U Official',
-    admin_review_date: new Date().toISOString(),
-    ...(scoresheetPayload !== null && { admin_scoresheet: scoresheetPayload }),
-  };
-
-  let venueId = id;
-  if (id) {
-    const { error } = await sb.from('venues').update(payload).eq('id', id);
-    if (error) { showToast('Error: ' + error.message, 'error'); return; }
-    // Upload banner if selected
-    venueId = id;
-  } else {
-    const { data: newV, error } = await sb.from('venues').insert(payload).select('id').single();
-    if (error) { showToast('Error: ' + error.message, 'error'); return; }
-    venueId = newV.id;
-  }
-
-  // Upload banner
-  const bannerFile = document.getElementById('adm-banner-file').files[0];
-  if (bannerFile) {
-    const ext = bannerFile.name.split('.').pop();
-    const path = `banners/${venueId}.${ext}`;
-    await sb.storage.from('review-photos').upload(path, bannerFile, { upsert: true });
-    const { data: bannerData } = sb.storage.from('review-photos').getPublicUrl(path);
-    await sb.from('venues').update({ banner_url: bannerData.publicUrl }).eq('id', venueId);
-  }
-
-  // Upload PDF
-  const pdfFile = document.getElementById('adv-pdf-input').files[0];
-  const pdfRemove = document.getElementById('adv-pdf-remove').value === '1';
-  if (pdfFile) {
-    const pdfPath = `pdfs/${venueId}.pdf`;
-    await sb.storage.from('review-photos').upload(pdfPath, pdfFile, { upsert: true, contentType: 'application/pdf' });
-    const { data: pdfData } = sb.storage.from('review-photos').getPublicUrl(pdfPath);
-    await sb.from('venues').update({ pdf_url: pdfData.publicUrl }).eq('id', venueId);
-  } else if (pdfRemove) {
-    await sb.from('venues').update({ pdf_url: null }).eq('id', venueId);
-  }
-
-  _venueCache = null; // bust browse cache
-  showToast('✅ Venue saved!');
-  admLoadVenueList('');
-  document.getElementById('adm-venue-form').style.display = 'none';
-  // Pre-load venue detail in background so it's fresh when admin closes the dash
-  if (venueId) loadVenueDetail(venueId, name).catch(() => {});
-  } catch(e) { console.error('saveAdminVenue:', e); showToast('Error saving venue: ' + e.message, 'error'); }
 }
 
 // ── ADMIN REVIEW MODERATION ──
