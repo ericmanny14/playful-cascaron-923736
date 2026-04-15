@@ -1243,7 +1243,7 @@ let currentVenueId = null;
 const reactions = {};
 let _venueCache = null;        // cached venue list for browse
 let _venueCacheTime = 0;       // timestamp of last fetch
-const VENUE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const VENUE_CACHE_TTL = 60 * 1000; // 1 minute — short enough to see edits quickly
 
 // ═══════════════════════════════════
 // PAGE & UI HELPERS
@@ -1409,17 +1409,13 @@ async function signOut() {
   const dash = document.getElementById('admin-dash');
   if (dash) dash.classList.remove('open');
   currentUser = null; currentProfile = null;
+  _venueCache = null; // bust venue cache so next login starts fresh
   try { await sb.auth.signOut({ scope: 'local' }); } catch(e) {}
-  // Manually clear all Supabase auth keys from localStorage
-  // so the session can never auto-restore on reload
-  try {
-    Object.keys(localStorage).forEach(k => {
-      if (k.startsWith('sb-') || k.toLowerCase().includes('supabase')) {
-        localStorage.removeItem(k);
-      }
-    });
-  } catch(e) {}
-  window.location.href = window.location.pathname;
+  // Nuclear clear — wipe ALL local + session storage so no token can survive
+  try { localStorage.clear(); } catch(e) {}
+  try { sessionStorage.clear(); } catch(e) {}
+  // Hard reload bypassing browser cache
+  window.location.replace(window.location.pathname + '?_=' + Date.now());
 }
 
 function updateNavUI(user) {
@@ -2519,7 +2515,7 @@ async function saveAdminReview() {
 
 async function loadAdminSpotlight(venueId) {
   const { data: venue } = await sb.from('venues')
-    .select('admin_scoresheet, admin_review_text, admin_review_video, admin_review_date, admin_reviewer_name')
+    .select('admin_scoresheet')
     .eq('id', venueId).single();
 
   const d = venue?.admin_scoresheet;
@@ -2830,12 +2826,13 @@ async function admEditVenue(venueId) {
   document.getElementById('adv-parking').value = v.parking || '';
   document.getElementById('adv-transit').value = v.transit || '';
   document.getElementById('adv-description').value = v.description || '';
-  document.getElementById('adv-video-url').value = v.admin_review_video || '';
+  // Read review content from admin_scoresheet (JSONB) — that's where saves now write.
+  // Fall back to legacy separate columns for existing data that was saved the old way.
+  const sc = v.admin_scoresheet;
+  document.getElementById('adv-video-url').value = sc?.video_url || v.admin_review_video || '';
   document.getElementById('adv-reviewer-name').value = v.admin_reviewer_name || '141 venn-U Official';
   document.getElementById('adv-featured').checked = v.is_featured || false;
-  document.getElementById('adv-review-body').innerHTML = v.admin_review_text || '';
-  // Restore official score breakdown from saved admin_scoresheet
-  const sc = v.admin_scoresheet;
+  document.getElementById('adv-review-body').innerHTML = sc?.written_review || v.admin_review_text || '';
   document.getElementById('adv-official-score').value = sc?.total_score != null ? sc.total_score : '';
   document.getElementById('adv-score-pre').value  = sc?.cat_pregame    != null ? sc.cat_pregame    : '';
   document.getElementById('adv-score-atm').value  = sc?.cat_atmosphere != null ? sc.cat_atmosphere : '';
@@ -2908,19 +2905,15 @@ async function saveAdminVenue() {
       video_url: embedUrl,
     } : null;
 
-    // Only columns that are guaranteed to exist in the venues table
-    // (capacity, tags, description, is_featured excluded — add them in
-    //  Supabase first if you need them)
+    // Only write columns guaranteed to exist in the venues table.
+    // All review content lives inside admin_scoresheet (JSONB) — the display
+    // reads exclusively from there, so separate admin_review_* columns are not needed.
     const payload = {
       name,
       city:  document.getElementById('adv-city')?.value.trim()  || null,
       state: document.getElementById('adv-state')?.value.trim() || null,
       sport: document.getElementById('adv-sport')?.value.trim() || null,
       team:  document.getElementById('adv-team')?.value.trim()  || null,
-      admin_review_text:   document.getElementById('adv-review-body')?.innerHTML || null,
-      admin_review_video:  embedUrl,
-      admin_reviewer_name: document.getElementById('adv-reviewer-name')?.value.trim() || '141 venn-U Official',
-      admin_review_date:   new Date().toISOString(),
       ...(scoresheetPayload && { admin_scoresheet: scoresheetPayload }),
     };
 
