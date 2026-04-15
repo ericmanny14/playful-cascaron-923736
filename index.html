@@ -1815,7 +1815,7 @@ async function loadVenueDetail(venueId, venueName) {
 async function loadHomeVenues() {
   const grid = document.getElementById('home-venue-grid');
   if (!grid) return;
-
+  try {
   // Reuse the browse venue cache
   const now = Date.now();
   let venues;
@@ -1823,7 +1823,7 @@ async function loadHomeVenues() {
     venues = _venueCache;
   } else {
     const { data, error } = await sb.from('venues').select('id,name,city,state,sport,team,admin_scoresheet').order('name');
-    if (error) { grid.innerHTML = '<div class="empty-state"><p>Error loading venues</p></div>'; return; }
+    if (error) { grid.innerHTML = '<div class="empty-state"><p>Error loading venues. Please refresh.</p></div>'; return; }
     _venueCache = data;
     _venueCacheTime = now;
     venues = data;
@@ -1836,6 +1836,10 @@ async function loadHomeVenues() {
 
   loadTopVenues(); // refresh sidebar leaderboard
   renderHomeVenueGrid(venues);
+  } catch(err) {
+    console.error('loadHomeVenues error:', err);
+    grid.innerHTML = '<div class="empty-state"><p>Error loading venues. Please refresh the page.</p></div>';
+  }
 }
 
 function renderHomeVenueGrid(venues) {
@@ -1894,6 +1898,7 @@ async function loadVenueBrowse() {
   _hide('venue-141-bar');
   _hide('admin-scoresheet-display');
   _hide('admin-scoresheet-editor');
+  try {
 
   // Load venue list (with short-lived cache to avoid redundant fetches)
   let venues;
@@ -1946,16 +1951,24 @@ async function loadVenueBrowse() {
     </div>`;
   };
 
-  document.getElementById('venue-reviews-list').innerHTML = `
-    <div style="margin-bottom:22px">
-      <input type="text" id="venue-search-input" placeholder="🔍  Search venues, cities, teams..."
-        style="width:100%;box-sizing:border-box;padding:12px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:15px;outline:none"
-        oninput="filterVenueBrowse(this.value)">
-    </div>
-    <div id="venue-browse-sections">
-      ${renderSection('👑 Official 141 Reviews', official)}
-      ${renderSection('🏟️ Community Reviews', community)}
-    </div>`;
+  const browseListEl = document.getElementById('venue-reviews-list');
+  if (browseListEl) {
+    browseListEl.innerHTML = `
+      <div style="margin-bottom:22px">
+        <input type="text" id="venue-search-input" placeholder="🔍  Search venues, cities, teams..."
+          style="width:100%;box-sizing:border-box;padding:12px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:15px;outline:none"
+          oninput="filterVenueBrowse(this.value)">
+      </div>
+      <div id="venue-browse-sections">
+        ${renderSection('👑 Official 141 Reviews', official)}
+        ${renderSection('🏟️ Community Reviews', community)}
+      </div>`;
+  }
+  } catch(err) {
+    console.error('loadVenueBrowse error:', err);
+    const el = document.getElementById('venue-reviews-list');
+    if (el) el.innerHTML = '<div class="empty-state"><p>Error loading venues. Please refresh the page.</p></div>';
+  }
 }
 
 async function admDeleteVenue(venueId, venueName) {
@@ -2163,7 +2176,7 @@ async function toggleFollowModal(userId) {
 // ═══════════════════════════════════
 async function editReview(reviewId) {
   if (!currentUser) { openModal('auth'); return; }
-
+  try {
   // Fetch the review data
   const { data: review, error } = await sb.from('reviews').select('*').eq('id', reviewId).eq('user_id', currentUser.id).single();
   if (error || !review) {
@@ -2172,11 +2185,13 @@ async function editReview(reviewId) {
   }
 
   // Pre-fill the modal form
-  document.getElementById('m-venue-name').value = review.venue_name;
-  document.getElementById('m-venue-details').value = '';
-  document.getElementById('m-section').value = review.section || '';
-  document.getElementById('m-review-text').value = review.review_text || '';
-  document.getElementById('m-anonymous').checked = review.is_anonymous || false;
+  const _setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  _setVal('m-venue-name', review.venue_name);
+  _setVal('m-venue-details', '');
+  _setVal('m-section', review.section || '');
+  _setVal('m-review-text', review.review_text || '');
+  const anonEl = document.getElementById('m-anonymous');
+  if (anonEl) anonEl.checked = review.is_anonymous || false;
 
   // Pre-select reactions
   const prefillScores = {
@@ -2209,10 +2224,16 @@ async function editReview(reviewId) {
 
   // Change submit button to update
   const submitBtn = document.getElementById('modal-submit-btn');
-  submitBtn.textContent = 'Update Review';
-  submitBtn.onclick = () => updateReview(reviewId);
+  if (submitBtn) {
+    submitBtn.textContent = 'Update Review';
+    submitBtn.onclick = () => updateReview(reviewId);
+  }
 
   openModal('submit');
+  } catch(err) {
+    console.error('editReview error:', err);
+    showToast('Error loading review for editing. Please try again.', 'error');
+  }
 }
 
 async function updateReview(reviewId) {
@@ -2910,7 +2931,7 @@ async function saveAdminVenue() {
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Request timed out — check Supabase RLS policies for venues')), 8000));
 
     const { error } = await Promise.race([dbCall, timeout]);
-    if (error) { showToast('Save error: ' + error.message, 'error'); return; }
+    if (error) { _venueCache = null; showToast('Save error: ' + error.message, 'error'); return; }
 
     _venueCache = null;
     showToast('✅ Venue saved!');
@@ -2920,6 +2941,7 @@ async function saveAdminVenue() {
 
   } catch(e) {
     console.error('saveAdminVenue error:', e);
+    _venueCache = null;
     showToast(e.message || 'Error saving venue', 'error');
   } finally {
     clearTimeout(safetyTimer);
