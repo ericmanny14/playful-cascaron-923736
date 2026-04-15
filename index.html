@@ -731,75 +731,14 @@ nav ul a:hover{color:var(--ink)}
       <!-- ADMIN SCORESHEET DISPLAY — shown to all when filled in -->
       <div id="admin-scoresheet-display" style="display:none"></div>
 
-      <!-- ADMIN SCORESHEET EDITOR — only visible to admin -->
+      <!-- Admin quick-link — edit this venue's official review in the admin panel -->
       <div id="admin-scoresheet-editor" style="display:none">
-        <div class="admin-panel" style="margin-bottom:16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-            <div class="admin-panel-title" style="margin-bottom:0">👑 Official 141 Review</div>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-outline" style="padding:6px 14px;font-size:12px" onclick="openAdminDashEditVenue()">✏️ Edit Venue</button>
-              <button class="btn btn-outline" style="padding:6px 14px;font-size:12px;color:var(--dislike);border-color:var(--dislike)" onclick="admDeleteVenue(currentVenueId)">🗑 Delete Venue</button>
-            </div>
+        <div class="admin-panel" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+          <div class="admin-panel-title" style="margin-bottom:0">👑 Official 141 Review</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-grad" style="padding:8px 16px;font-size:13px" onclick="openAdminDashEditVenue()">✏️ Edit in Admin Panel</button>
+            <button class="btn btn-outline" style="padding:8px 14px;font-size:12px;color:var(--dislike);border-color:var(--dislike)" onclick="admDeleteVenue(currentVenueId)">🗑 Delete</button>
           </div>
-
-          <div class="admin-field">
-            <label>Official 141 Score <span style="color:var(--muted);font-size:12px">(3 – 5 scale)</span></label>
-            <input type="number" id="admin-manual-score" min="3" max="5" step="0.1" placeholder="e.g. 4.2" style="width:140px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:18px;font-weight:700">
-          </div>
-
-          <div class="admin-field">
-            <label>Category Scores <span style="color:var(--muted);font-size:12px">(3 – 5 scale, optional)</span></label>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px">
-              <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">🚗 Pre-Game</div><input type="number" id="adm-cat-pregame" min="3" max="5" step="0.1" placeholder="–" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:15px;font-weight:600;box-sizing:border-box"></div>
-              <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">🎉 Atmosphere</div><input type="number" id="adm-cat-atmosphere" min="3" max="5" step="0.1" placeholder="–" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:15px;font-weight:600;box-sizing:border-box"></div>
-              <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">💺 Comfort</div><input type="number" id="adm-cat-comfort" min="3" max="5" step="0.1" placeholder="–" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:15px;font-weight:600;box-sizing:border-box"></div>
-              <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">🍔 Amenities</div><input type="number" id="adm-cat-amenities" min="3" max="5" step="0.1" placeholder="–" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:15px;font-weight:600;box-sizing:border-box"></div>
-              <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">🛡️ Security</div><input type="number" id="adm-cat-security" min="3" max="5" step="0.1" placeholder="–" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:15px;font-weight:600;box-sizing:border-box"></div>
-              <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">🏙️ Post-Game</div><input type="number" id="adm-cat-postgame" min="3" max="5" step="0.1" placeholder="–" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:15px;font-weight:600;box-sizing:border-box"></div>
-            </div>
-          </div>
-
-          <div class="admin-field">
-            <label>Written Review <span style="color:var(--muted);font-size:12px">(optional)</span></label>
-            <div class="rich-editor"><div class="rich-toolbar">
-              <button class="rich-btn" onclick="fmt('bold')"><b>B</b></button>
-              <button class="rich-btn" onclick="fmt('italic')"><i>I</i></button>
-              <button class="rich-btn" onclick="fmt('underline')"><u>U</u></button>
-              <button class="rich-btn" onclick="fmt('insertUnorderedList')">• List</button>
-              <button class="rich-btn" onclick="fmt('removeFormat')">Clear</button>
-            </div>
-            <div class="rich-body" id="admin-written-review" contenteditable="true" placeholder="Share your official take on this venue…"></div>
-            </div>
-          </div>
-
-          <div class="admin-field">
-            <label>YouTube Review URL <span style="color:var(--muted);font-size:12px">(optional)</span></label>
-            <input type="text" id="admin-video-url-input" placeholder="https://www.youtube.com/watch?v=...">
-          </div>
-
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="admin-field">
-              <label>Visit Date</label>
-              <input type="date" id="admin-visit-date">
-            </div>
-            <div class="admin-field">
-              <label>Game / Event Attended</label>
-              <input type="text" id="admin-game-attended" placeholder="e.g. Cowboys vs Eagles">
-            </div>
-          </div>
-
-          <div style="margin-top:14px">
-            <label style="font-size:13px;font-weight:600;color:var(--muted2);display:block;margin-bottom:8px">🍔 What I Ate &amp; Drank</label>
-            <div class="add-food-row">
-              <input type="text" id="food-item-input" placeholder="Item name (e.g. Brisket Sandwich)" onkeydown="if(event.key==='Enter')addFoodItem()">
-              <button class="btn btn-outline" style="padding:8px 14px;font-size:13px;white-space:nowrap" onclick="addFoodItem()">+ Add</button>
-            </div>
-            <div class="food-items-grid" id="food-items-grid">
-              <div style="color:var(--muted);font-size:12px;grid-column:1/-1">Add items you ate or drank here.</div>
-            </div>
-          </div>
-
-          <button class="btn btn-grad" style="width:100%;padding:13px;margin-top:16px;font-size:15px" onclick="saveAdminScoresheet()">💾 Publish Official Review</button>
         </div>
       </div>
 
@@ -1278,13 +1217,20 @@ function navToVenueBrowse() {
 }
 
 function setTab(el) {
-  el.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
+  try {
+    const tabs = el?.closest('.tabs');
+    if (tabs) tabs.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    if (el) el.classList.add('active');
+  } catch(e) { console.error('setTab error:', e); }
 }
 
-function openModal(name) { document.getElementById('modal-' + name).classList.add('open'); }
+function openModal(name) {
+  const m = document.getElementById('modal-' + name);
+  if (m) m.classList.add('open');
+}
 function closeModal(name) {
-  document.getElementById('modal-' + name).classList.remove('open');
+  const m = document.getElementById('modal-' + name);
+  if (m) m.classList.remove('open');
   if (name === 'submit') {
     // Clear stale reaction scores so next open is always fresh
     Object.keys(reactions).forEach(k => delete reactions[k]);
@@ -2519,66 +2465,31 @@ async function saveAdminReview() {
 }
 
 async function loadAdminSpotlight(venueId) {
-  const { data: venue } = await sb.from('venues')
-    .select('admin_scoresheet')
-    .eq('id', venueId).single();
+  try {
+    const { data: venue } = await sb.from('venues')
+      .select('admin_scoresheet')
+      .eq('id', venueId).single();
 
-  const d = venue?.admin_scoresheet;
+    const d = venue?.admin_scoresheet;
 
-  // Populate editor for admin
-  const _se = document.getElementById('admin-scoresheet-editor');
-  if (isAdmin()) {
-    if (_se) _se.style.display = 'block';
-    if (d?.total_score != null) {
-      const scoreInput = document.getElementById('admin-manual-score');
-      if (scoreInput) scoreInput.value = d.total_score;
-    }
-    if (d?.written_review) {
-      const wr = document.getElementById('admin-written-review');
-      if (wr) wr.innerHTML = d.written_review;
-    }
-    if (d?.video_url) {
-      const vi = document.getElementById('admin-video-url-input');
-      if (vi) vi.value = d.video_url;
-    }
-    if (d?.visit_date) {
-      const vd = document.getElementById('admin-visit-date');
-      if (vd) vd.value = d.visit_date;
-    }
-    if (d?.game_attended) {
-      const ga = document.getElementById('admin-game-attended');
-      if (ga) ga.value = d.game_attended;
-    }
-    // Restore category scores
-    [['pregame','cat_pregame'],['atmosphere','cat_atmosphere'],['comfort','cat_comfort'],
-     ['amenities','cat_amenities'],['security','cat_security'],['postgame','cat_postgame']].forEach(([id, key]) => {
-      const el = document.getElementById('adm-cat-' + id);
-      if (el) el.value = d?.[key] != null ? d[key] : '';
-    });
-    // Restore food items
-    if (d?.food_items?.length) {
-      foodItems.length = 0;
-      d.food_items.forEach(f => foodItems.push(f));
-      renderFoodItems();
-    }
-  } else {
-    if (_se) _se.style.display = 'none';
-  }
+    // Show admin quick-link bar only to admin users
+    const _se = document.getElementById('admin-scoresheet-editor');
+    if (_se) _se.style.display = isAdmin() ? 'block' : 'none';
 
-  // Public display
-  const displayEl = document.getElementById('admin-scoresheet-display');
-  if (displayEl) {
-    if (d?.total_score != null || d?.written_review || d?.video_url) {
-      displayEl.style.display = 'block';
-      displayEl.innerHTML = renderScoresheetDisplay(d);
-    } else {
-      displayEl.style.display = 'none';
+    // Public display of the official scoresheet
+    const displayEl = document.getElementById('admin-scoresheet-display');
+    if (displayEl) {
+      if (d?.total_score != null || d?.written_review || d?.video_url) {
+        displayEl.style.display = 'block';
+        displayEl.innerHTML = renderScoresheetDisplay(d);
+      } else {
+        displayEl.style.display = 'none';
+      }
     }
-  }
 
-  // Populate sidebar: food items
-  const foodItemsList = d?.food_items || [];
-  populateVenueSidebar([], foodItemsList);
+    // Populate sidebar food items
+    populateVenueSidebar([], d?.food_items || []);
+  } catch(e) { console.error('loadAdminSpotlight error:', e); }
 }
 
 sb.auth.onAuthStateChange(async (event, session) => {
@@ -2737,10 +2648,13 @@ async function openAdminDashEditVenue() {
 }
 
 function switchAdminTab(tab, btn) {
-  document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('admin-tab-' + tab).classList.add('active');
+  try {
+    document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const section = document.getElementById('admin-tab-' + tab);
+    if (section) section.classList.add('active');
+  } catch(e) { console.error('switchAdminTab error:', e); }
 }
 
 async function admLoadOverview() {
@@ -3245,93 +3159,6 @@ function removeFoodItem(idx) {
   renderFoodItems();
   recalcAdminScore();
 }
-
-// ── SAVE SCORESHEET TO SUPABASE ──
-async function saveAdminScoresheet() {
-  if (!isAdmin()) { showToast('Admin access required', 'error'); return; }
-  if (!currentVenueId) { showToast('Open a specific venue first, then save', 'error'); return; }
-  const btn = document.querySelector('[onclick="saveAdminScoresheet()"]');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…'; }
-
-  // Safety net: always re-enable button after 12s no matter what
-  const safetyTimer = setTimeout(() => {
-    if (btn) { btn.disabled = false; btn.innerHTML = '💾 Publish Official Review'; }
-  }, 12000);
-
-  try {
-    await _saveAdminScoresheetInner();
-  } catch(e) {
-    console.error('saveAdminScoresheet error:', e);
-    showToast('Error: ' + e.message, 'error');
-  } finally {
-    clearTimeout(safetyTimer);
-    if (btn) { btn.disabled = false; btn.innerHTML = '💾 Publish Official Review'; }
-  }
-}
-
-async function _saveAdminScoresheetInner() {
-  const scoreVal = parseFloat(document.getElementById('admin-manual-score')?.value);
-  const totalScore = isNaN(scoreVal) ? null : Math.min(5, Math.max(3, scoreVal));
-
-  const videoUrl = document.getElementById('admin-video-url-input')?.value.trim();
-  let embedUrl = null;
-  if (videoUrl) {
-    const m = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-    if (m) embedUrl = `https://www.youtube.com/embed/${m[1]}`;
-  }
-
-  const getC = id => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v) ? null : Math.min(5, Math.max(3, v)); };
-  const scoresheetData = {
-    total_score: totalScore,
-    cat_pregame:    getC('adm-cat-pregame'),
-    cat_atmosphere: getC('adm-cat-atmosphere'),
-    cat_comfort:    getC('adm-cat-comfort'),
-    cat_amenities:  getC('adm-cat-amenities'),
-    cat_security:   getC('adm-cat-security'),
-    cat_postgame:   getC('adm-cat-postgame'),
-    written_review: document.getElementById('admin-written-review')?.innerHTML || null,
-    video_url: embedUrl,
-    visit_date: document.getElementById('admin-visit-date')?.value || null,
-    game_attended: document.getElementById('admin-game-attended')?.value.trim() || null,
-    food_items: foodItems,
-  };
-
-  // Only update admin_scoresheet (JSONB) — the display reads everything from there.
-  // .select('id') lets us detect silent RLS blocks (0 rows returned = blocked).
-  const { data: saved, error } = await sb.from('venues')
-    .update({ admin_scoresheet: scoresheetData })
-    .eq('id', currentVenueId)
-    .select('id');
-
-  if (error) { showToast('Error saving: ' + error.message, 'error'); return; }
-  if (!saved?.length) {
-    showToast('❌ Save blocked — add an admin UPDATE policy for the venues table in Supabase', 'error');
-    return;
-  }
-
-  // Also upsert a record in reviews table so it appears on admin's profile page
-  const clamp = v => v == null ? null : Math.min(5, Math.max(3, Math.round(v)));
-  const vname = document.getElementById('venue-detail-name')?.textContent || '';
-  try {
-    await sb.from('reviews').upsert({
-      user_id: currentUser.id,
-      venue_id: currentVenueId,
-      venue_name: vname,
-      score_pregame:    clamp(scoresheetData.cat_pregame),
-      score_atmosphere: clamp(scoresheetData.cat_atmosphere),
-      score_comfort:    clamp(scoresheetData.cat_comfort),
-      score_amenities:  clamp(scoresheetData.cat_amenities),
-      score_security:   clamp(scoresheetData.cat_security),
-      score_postgame:   clamp(scoresheetData.cat_postgame),
-      review_text: scoresheetData.written_review || null,
-      is_anonymous: false,
-    }, { onConflict: 'user_id,venue_id', ignoreDuplicates: false });
-  } catch(e) { console.warn('admin review upsert skipped (non-fatal):', e.message); }
-
-  _venueCache = null;
-  showToast('✅ Official review published!');
-  await loadVenueDetail(currentVenueId, vname);
-} // end _saveAdminScoresheetInner
 
 // ── RENDER SCORESHEET FOR PUBLIC VIEW ──
 function renderScoresheetDisplay(data) {
