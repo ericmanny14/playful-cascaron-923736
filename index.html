@@ -1254,6 +1254,7 @@ document.querySelectorAll('.modal-bg').forEach(m => {
 
 function showToast(msg, type = 'success') {
   const t = document.getElementById('toast');
+  if (!t) { console.warn('[showToast]', type, msg); return; }
   t.textContent = msg; t.className = 'toast ' + type + ' show';
   setTimeout(() => t.classList.remove('show'), 3500);
 }
@@ -2788,13 +2789,18 @@ async function saveAdminVenue() {
   if (saveBtn?.disabled) return;
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
-  // Safety net: always re-enable button after 10s no matter what
+  let timedOut = false;
+  // Safety net: re-enable button AND show timeout toast if Supabase never responds
   const safetyTimer = setTimeout(() => {
+    timedOut = true;
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save Venue'; }
-  }, 10000);
+    showToast('⏱ Save timed out — check your connection and try again', 'error');
+  }, 12000);
 
   try {
-    const id = document.getElementById('adm-venue-edit-id')?.value || '';
+    if (!isAdmin()) { showToast('Admin access required', 'error'); return; }
+
+    const id = document.getElementById('adm-venue-edit-id')?.value.trim() || '';
     const name = document.getElementById('adv-name')?.value.trim() || '';
     if (!name) { showToast('Venue name is required', 'error'); return; }
 
@@ -2803,49 +2809,79 @@ async function saveAdminVenue() {
     let embedUrl = null;
     if (videoUrl) {
       const m = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-      if (m) embedUrl = `https://www.youtube.com/embed/${m[1]}`;
+      embedUrl = m ? `https://www.youtube.com/embed/${m[1]}` : null;
     }
 
-    // Score fields
+    // Score fields (clamped 3–5)
     const getS = elId => { const v = parseFloat(document.getElementById(elId)?.value); return isNaN(v) ? null : Math.min(5, Math.max(3, v)); };
     const catPre = getS('adv-score-pre'), catAtm = getS('adv-score-atm'), catCom = getS('adv-score-com');
     const catAmn = getS('adv-score-amn'), catSec = getS('adv-score-sec'), catPost = getS('adv-score-post');
     let officialScore = getS('adv-official-score');
     if (officialScore == null) {
       const cats = [catPre, catAtm, catCom, catAmn, catSec, catPost].filter(c => c != null);
-      if (cats.length) officialScore = cats.reduce((a, b) => a + b, 0) / cats.length;
+      if (cats.length) officialScore = parseFloat((cats.reduce((a, b) => a + b, 0) / cats.length).toFixed(2));
     }
-    const hasScoreData = officialScore != null || catPre != null;
-    const scoresheetPayload = hasScoreData ? {
-      total_score: officialScore,
-      cat_pregame: catPre, cat_atmosphere: catAtm, cat_comfort: catCom,
-      cat_amenities: catAmn, cat_security: catSec, cat_postgame: catPost,
-      written_review: document.getElementById('adv-review-body')?.innerHTML || null,
-      video_url: embedUrl,
+
+    const writtenReview = document.getElementById('adv-review-body')?.innerHTML?.trim() || null;
+    const hasAnyReviewData = officialScore != null || catPre != null || writtenReview || embedUrl;
+    const scoresheetPayload = hasAnyReviewData ? {
+      total_score:    officialScore,
+      cat_pregame:    catPre,
+      cat_atmosphere: catAtm,
+      cat_comfort:    catCom,
+      cat_amenities:  catAmn,
+      cat_security:   catSec,
+      cat_postgame:   catPost,
+      written_review: writtenReview,
+      video_url:      embedUrl,
     } : null;
 
-    // Only write columns guaranteed to exist in the venues table.
-    // All review content lives inside admin_scoresheet (JSONB) — the display
-    // reads exclusively from there, so separate admin_review_* columns are not needed.
+    // Collect tags from DOM pills
+    const tags = [...(document.getElementById('adv-tags-wrap')?.querySelectorAll('.tag-pill') || [])]
+      .map(p => p.dataset.tag).filter(Boolean);
+
+    // Capacity as integer
+    const capRaw = parseInt(document.getElementById('adv-capacity')?.value, 10);
+
+    // Build payload with ALL form fields
     const payload = {
       name,
-      city:  document.getElementById('adv-city')?.value.trim()  || null,
-      state: document.getElementById('adv-state')?.value.trim() || null,
-      sport: document.getElementById('adv-sport')?.value.trim() || null,
-      team:  document.getElementById('adv-team')?.value.trim()  || null,
+      city:        document.getElementById('adv-city')?.value.trim()        || null,
+      state:       document.getElementById('adv-state')?.value.trim()       || null,
+      sport:       document.getElementById('adv-sport')?.value.trim()       || null,
+      team:        document.getElementById('adv-team')?.value.trim()        || null,
+      capacity:    isNaN(capRaw) ? null : capRaw,
+      surface:     document.getElementById('adv-surface')?.value.trim()     || null,
+      roof:        document.getElementById('adv-roof')?.value.trim()        || null,
+      parking:     document.getElementById('adv-parking')?.value.trim()     || null,
+      transit:     document.getElementById('adv-transit')?.value.trim()     || null,
+      description: document.getElementById('adv-description')?.value.trim() || null,
+      is_featured: document.getElementById('adv-featured')?.checked ?? false,
+      tags:        tags.length ? tags : null,
       ...(scoresheetPayload && { admin_scoresheet: scoresheetPayload }),
     };
+
+    console.log('[saveAdminVenue] payload:', JSON.stringify(payload));
 
     const dbCall = id
       ? sb.from('venues').update(payload).eq('id', id).select('id')
       : sb.from('venues').insert(payload).select('id');
 
     const { data: saved, error } = await dbCall;
-    if (error) { _venueCache = null; showToast('Save error: ' + error.message, 'error'); return; }
-    // If no rows returned, RLS silently blocked the write
+
+    if (timedOut) return; // safety timer already fired, don't double-toast
+
+    if (error) {
+      _venueCache = null;
+      console.error('[saveAdminVenue] Supabase error:', error);
+      showToast('Save error: ' + error.message, 'error');
+      return;
+    }
+    // Empty array = RLS silently blocked the write
     if (!saved?.length) {
       _venueCache = null;
-      showToast('❌ Save blocked — add an admin UPDATE policy for the venues table in Supabase', 'error');
+      const action = id ? 'UPDATE' : 'INSERT';
+      showToast(`❌ Save blocked — add an admin ${action} policy for the venues table in Supabase`, 'error');
       return;
     }
 
@@ -2856,9 +2892,9 @@ async function saveAdminVenue() {
     if (formEl) formEl.style.display = 'none';
 
   } catch(e) {
-    console.error('saveAdminVenue error:', e);
+    console.error('[saveAdminVenue] caught exception:', e);
     _venueCache = null;
-    showToast(e.message || 'Error saving venue', 'error');
+    if (!timedOut) showToast(e.message || 'Error saving venue', 'error');
   } finally {
     clearTimeout(safetyTimer);
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save Venue'; }
