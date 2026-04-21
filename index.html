@@ -1502,14 +1502,38 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
       if (existingVenue) {
         venueId = existingVenue.id;
       } else {
-        const parts = venueDetails ? venueDetails.split('·') : [];
+        // venueDetails format: "City, State · Sport / Team" — parse carefully
+        let city = null, state = null, sport = null, team = null;
+        if (venueDetails) {
+          const [locPart, sportPart] = venueDetails.split('·').map(s => s.trim());
+          if (locPart) {
+            const locSplit = locPart.split(',').map(s => s.trim());
+            city  = locSplit[0] || null;
+            state = locSplit[1] || null;
+          }
+          if (sportPart) {
+            const sportSplit = sportPart.split('/').map(s => s.trim());
+            sport = sportSplit[0] || null;
+            team  = sportSplit[1] || null;
+          }
+        }
         const { data: newVenue, error: ve } = await sb.from('venues').insert({
           name: venueName,
-          city: parts[0]?.trim() || null,
-          sport: parts[1]?.trim() || null,
-          team: parts[2]?.trim() || null,
+          city,
+          state,
+          sport,
+          team,
         }).select('id').single();
-        if (ve) { showToast('Error saving venue: ' + ve.message, 'error'); return false; }
+        if (ve) {
+          // If blocked by RLS, the venue table INSERT policy may be missing for regular users.
+          // Provide a clear message and let the review still attempt to submit.
+          if (ve.code === '42501' || ve.message?.toLowerCase().includes('policy') || !newVenue) {
+            showToast('Venue "' + venueName + '" couldn\'t be saved — it may not exist in our database yet. Ask an admin to add it.', 'error');
+          } else {
+            showToast('Error saving venue: ' + ve.message, 'error');
+          }
+          return false;
+        }
         venueId = newVenue.id;
         _venueCache = null;
       }
@@ -1561,14 +1585,25 @@ async function submitQuickReview() {
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Publishing...';
   try {
     const isAnonymous = document.getElementById('qs-anonymous').checked;
+    const knownId = document.getElementById('qs-venue-id')?.value?.trim() || null;
     const result = await submitReview(
       'qs',
       document.getElementById('qs-venue-name').value.trim(),
-      '', '', document.getElementById('qs-review-text').value.trim(),
-      isAnonymous
+      document.getElementById('qs-venue-details')?.value?.trim() || '',
+      '',
+      document.getElementById('qs-review-text').value.trim(),
+      isAnonymous,
+      knownId
     );
     if (result) {
       showToast('✅ Review published! Stamp added to your passport.');
+      _venueCache = null;
+      // Reset quick review form
+      ['qs-venue-name','qs-review-text'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      ['qs-venue-id','qs-venue-details'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      const anonEl = document.getElementById('qs-anonymous'); if (anonEl) anonEl.checked = false;
+      // Reset all reaction buttons
+      document.querySelectorAll('.qs-reaction-btn,.reaction-btn[data-prefix="qs"]').forEach(b => b.classList.remove('active'));
       loadHomeVenues();
       loadStats();
     }
@@ -2689,26 +2724,34 @@ let venueDropdownHighlight = -1;
 
 async function venueSearch(input, dropdownId, hiddenId, detailsId) {
   clearTimeout(venueSearchTimer);
+  // Clear the previously-selected ID as soon as the user types — prevents stale venue ID
+  const hiddenEl = document.getElementById(hiddenId);
+  if (hiddenEl) hiddenEl.value = '';
+
   const q = input.value.trim();
   const dropdown = document.getElementById(dropdownId);
   if (q.length < 2) { dropdown.style.display = 'none'; return; }
+
   venueSearchTimer = setTimeout(async () => {
-    const { data } = await sb.from('venues').select('id,name,city,state,sport,team')
-      .ilike('name', `%${q}%`).limit(8);
-    if (!data?.length) {
-      dropdown.innerHTML = `<div class="venue-add-new" onclick="selectNewVenue('${q}','${dropdownId}','${hiddenId}','${detailsId}')">➕ Add "${q}" as new venue</div>`;
-    } else {
-      dropdown.innerHTML = data.map(v => `
-        <div class="venue-option" onclick="selectVenue('${v.id}','${v.name}','${v.city||''}','${v.state||''}','${v.sport||''}','${v.team||''}','${dropdownId}','${hiddenId}','${detailsId}','${input.id}')">
-          <div>
-            <div style="font-weight:600">${v.name}</div>
-            <div class="venue-option-meta">${[v.city,v.state].filter(Boolean).join(', ')} ${v.sport ? '· '+v.sport : ''} ${v.team ? '/ '+v.team : ''}</div>
-          </div>
-        </div>`).join('') +
-        `<div class="venue-add-new" onclick="selectNewVenue('${q}','${dropdownId}','${hiddenId}','${detailsId}')">➕ Add "${q}" as new venue</div>`;
-    }
-    dropdown.style.display = 'block';
-    venueDropdownHighlight = -1;
+    try {
+      const { data } = await sb.from('venues').select('id,name,city,state,sport,team')
+        .ilike('name', `%${q}%`).limit(8);
+      if (!data?.length) {
+        dropdown.innerHTML = `<div class="venue-add-new" onclick="selectNewVenue('${q.replace(/'/g,"\\'")}','${dropdownId}','${hiddenId}','${detailsId}')">➕ Add "${q}" as new venue</div>`;
+      } else {
+        dropdown.innerHTML = data.map(v =>
+          `<div class="venue-option" onclick="selectVenue('${v.id}','${v.name.replace(/'/g,"\\'")}','${(v.city||'').replace(/'/g,"\\'")}','${(v.state||'').replace(/'/g,"\\'")}','${(v.sport||'').replace(/'/g,"\\'")}','${(v.team||'').replace(/'/g,"\\'")}','${dropdownId}','${hiddenId}','${detailsId}','${input.id}')">
+            <div>
+              <div style="font-weight:600">${v.name}</div>
+              <div class="venue-option-meta">${[v.city,v.state].filter(Boolean).join(', ')}${v.sport ? ' · '+v.sport : ''}${v.team ? ' / '+v.team : ''}</div>
+            </div>
+          </div>`
+        ).join('') +
+          `<div class="venue-add-new" onclick="selectNewVenue('${q.replace(/'/g,"\\'")}','${dropdownId}','${hiddenId}','${detailsId}')">➕ Add "${q}" as new venue</div>`;
+      }
+      dropdown.style.display = 'block';
+      venueDropdownHighlight = -1;
+    } catch(e) { console.error('venueSearch error:', e); }
   }, 250);
 }
 
@@ -2830,13 +2873,21 @@ function admShowNewVenueForm() {
   if (venuesTabBtn) switchAdminTab('venues', venuesTabBtn);
   document.getElementById('adm-venue-edit-id').value = '';
   document.getElementById('adm-venue-form-title').textContent = '✏️ Add New Venue';
-  ['adv-name','adv-city','adv-state','adv-sport','adv-team','adv-surface','adv-roof','adv-parking','adv-transit','adv-description','adv-video-url'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  ['adv-name','adv-city','adv-state','adv-sport','adv-team','adv-surface','adv-roof','adv-parking','adv-transit','adv-description','adv-video-url','adv-reviewer-name'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = (id === 'adv-reviewer-name') ? '141 venn-U Official' : '';
+  });
   ['adv-capacity','adv-score-pre','adv-score-atm','adv-score-com','adv-score-amn','adv-score-sec','adv-score-post','adv-official-score'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
-  document.getElementById('adv-featured').checked = false;
-  document.getElementById('adv-review-body').innerHTML = '';
-  document.getElementById('adv-tags-wrap').querySelectorAll('.tag-pill').forEach(t=>t.remove());
-  document.getElementById('adm-venue-form').style.display = 'block';
-  document.getElementById('adm-venue-form').scrollIntoView({ behavior: 'smooth' });
+  const featuredEl = document.getElementById('adv-featured'); if (featuredEl) featuredEl.checked = false;
+  const reviewBodyEl = document.getElementById('adv-review-body'); if (reviewBodyEl) reviewBodyEl.innerHTML = '';
+  const tagsWrap = document.getElementById('adv-tags-wrap'); if (tagsWrap) tagsWrap.querySelectorAll('.tag-pill').forEach(t=>t.remove());
+  const pdfCurrent = document.getElementById('adv-pdf-current'); if (pdfCurrent) pdfCurrent.style.display = 'none';
+  const pdfRemove = document.getElementById('adv-pdf-remove'); if (pdfRemove) pdfRemove.value = '0';
+  const pdfInput = document.getElementById('adv-pdf-input'); if (pdfInput) pdfInput.value = '';
+  const pdfName = document.getElementById('adv-pdf-name'); if (pdfName) pdfName.textContent = '';
+  const bannerPreview = document.getElementById('adm-banner-preview'); if (bannerPreview) bannerPreview.style.display = 'none';
+  const formEl = document.getElementById('adm-venue-form');
+  if (formEl) { formEl.style.display = 'block'; formEl.scrollIntoView({ behavior: 'smooth' }); }
 }
 
 async function admEditVenue(venueId) {
@@ -2976,11 +3027,30 @@ async function saveAdminVenue() {
 
     console.log('[saveAdminVenue] payload:', JSON.stringify(payload));
 
-    const dbCall = id
-      ? sb.from('venues').update(payload).eq('id', id).select('id')
-      : sb.from('venues').insert(payload).select('id');
+    const runDbCall = async (p) => {
+      const call = id
+        ? sb.from('venues').update(p).eq('id', id).select('id')
+        : sb.from('venues').insert(p).select('id');
+      return call;
+    };
 
-    const { data: saved, error } = await dbCall;
+    let { data: saved, error } = await runDbCall(payload);
+
+    // If a column in the payload doesn't exist in the schema, Supabase returns error code 42703.
+    // Fall back to a minimal safe payload so the save still works.
+    if (error?.code === '42703' || error?.message?.includes('column')) {
+      console.warn('[saveAdminVenue] schema column missing, retrying with minimal payload:', error.message);
+      const safePayload = {
+        name: payload.name,
+        city:  payload.city,
+        state: payload.state,
+        sport: payload.sport,
+        team:  payload.team,
+        is_featured: payload.is_featured,
+        ...(payload.admin_scoresheet && { admin_scoresheet: payload.admin_scoresheet }),
+      };
+      ({ data: saved, error } = await runDbCall(safePayload));
+    }
 
     if (timedOut) return; // safety timer already fired, don't double-toast
 
@@ -3001,6 +3071,11 @@ async function saveAdminVenue() {
     _venueCache = null;
     showToast('✅ Venue saved!');
     admLoadVenueList('').catch(() => {});
+    admLoadOverview().catch(() => {});
+    // Refresh home grid if it's currently visible
+    if (document.getElementById('page-home')?.classList.contains('active')) {
+      loadHomeVenues().catch(() => {});
+    }
     const formEl = document.getElementById('adm-venue-form');
     if (formEl) formEl.style.display = 'none';
 
