@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,800;1,700&family=Barlow:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Leaflet (free map, no API key) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/oKdQ=" crossorigin=""></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -308,6 +311,24 @@ nav ul a:hover{color:var(--ink)}
 .tv-item:hover .tv-name{color:var(--blue-light)}
 .tv-score{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;width:30px;color:var(--blue-light)}
 .tv-name{font-size:13px;font-weight:500;transition:color .15s}.tv-city{font-size:10px;color:var(--muted)}
+
+/* ── VENUE FOOD MAP ── */
+.venue-map-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:24px}
+.venue-map-header{padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.venue-map-title{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.venue-map-subtitle{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:2px}
+#venue-map{height:340px;width:100%;background:var(--bg3)}
+.venue-map-legend{padding:10px 16px;display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;border-top:1px solid var(--border)}
+.vml-item{display:flex;align-items:center;gap:5px}
+.vml-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+/* Leaflet popup dark theme override */
+.leaflet-popup-content-wrapper{background:var(--bg2);color:var(--ink);border:1px solid var(--border2);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+.leaflet-popup-tip{background:var(--bg2)}
+.leaflet-popup-content{font-family:'Barlow',sans-serif;font-size:13px;margin:10px 14px}
+.leaflet-popup-content strong{font-family:'Barlow Condensed',sans-serif;font-size:15px;text-transform:uppercase;letter-spacing:.3px}
+.leaflet-popup-content .pop-type{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:2px;text-transform:uppercase}
+.leaflet-popup-close-button{color:var(--muted) !important}
+.map-loading{display:flex;align-items:center;justify-content:center;height:340px;gap:10px;color:var(--muted);font-size:13px;font-family:'Space Mono',monospace}
 
 /* ── MINI SCORE BARS (venue cards) ── */
 .mini-score-bars{display:flex;gap:4px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
@@ -782,6 +803,23 @@ nav ul a:hover{color:var(--ink)}
             <button class="btn btn-grad" style="padding:8px 16px;font-size:13px" onclick="openAdminDashEditVenue()">✏️ Edit in Admin Panel</button>
             <button class="btn btn-outline" style="padding:8px 14px;font-size:12px;color:var(--dislike);border-color:var(--dislike)" onclick="admDeleteVenue(currentVenueId)">🗑 Delete</button>
           </div>
+        </div>
+      </div>
+
+      <!-- FOOD MAP -->
+      <div class="venue-map-card" id="venue-map-card" style="display:none">
+        <div class="venue-map-header">
+          <div>
+            <div class="venue-map-title">🍔 Best Food Around the Stadium</div>
+            <div class="venue-map-subtitle">Restaurants &amp; bars within walking distance</div>
+          </div>
+          <div id="venue-map-pick-count" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--blue-light)"></div>
+        </div>
+        <div id="venue-map"><div class="map-loading"><span class="spinner"></span> Loading map…</div></div>
+        <div class="venue-map-legend">
+          <div class="vml-item"><div class="vml-dot" style="background:#ef4444"></div> Stadium</div>
+          <div class="vml-item"><div class="vml-dot" style="background:#f59e0b"></div> 141 Pick</div>
+          <div class="vml-item"><div class="vml-dot" style="background:#3b82f6"></div> Nearby Food &amp; Bars</div>
         </div>
       </div>
 
@@ -1886,6 +1924,8 @@ async function loadVenueDetail(venueId, venueName) {
     if (listEl) listEl.innerHTML = reviews.map((r, i) => buildReviewCard(r, i)).join('');
 
     loadAdminSpotlight(venueId);
+    // Load map in background — non-blocking so reviews render immediately
+    initVenueMap(venue).catch(e => console.error('map error:', e));
   } catch(err) {
     console.error('loadVenueDetail error:', err);
     showToast('Error loading venue. Please try again.', 'error');
@@ -2035,6 +2075,9 @@ async function loadVenueBrowse() {
   _hide('venue-141-bar');
   _hide('admin-scoresheet-display');
   _hide('admin-scoresheet-editor');
+  _hide('venue-map-card');
+  // Destroy any active map instance so it doesn't linger
+  if (_venueMapInstance) { try { _venueMapInstance.remove(); } catch(e) {} _venueMapInstance = null; }
   try {
 
   // Load venue list (with short-lived cache to avoid redundant fetches)
@@ -3253,6 +3296,156 @@ async function admLoadUsers() {
       <div style="font-size:11px;color:var(--muted)">${new Date(u.created_at).toLocaleDateString()}</div>
     </div>`).join('') || '<div style="color:var(--muted)">No users yet</div>';
   } catch(e) { console.error('admLoadUsers:', e); }
+}
+
+// ═══════════════════════════════════
+// VENUE FOOD MAP (Leaflet + OpenStreetMap)
+// ═══════════════════════════════════
+let _venueMapInstance = null; // track active Leaflet map so we can destroy it on next load
+
+async function initVenueMap(venue) {
+  const card = document.getElementById('venue-map-card');
+  const mapEl = document.getElementById('venue-map');
+  if (!card || !mapEl) return;
+
+  // Destroy previous map instance to avoid "container already initialized" error
+  if (_venueMapInstance) {
+    try { _venueMapInstance.remove(); } catch(e) {}
+    _venueMapInstance = null;
+  }
+  mapEl.innerHTML = '<div class="map-loading"><span class="spinner"></span> Finding location…</div>';
+  card.style.display = 'block';
+
+  try {
+    // 1 ── Geocode the stadium via Nominatim (OSM free geocoder)
+    const geoQuery = [venue.name, venue.city, venue.state].filter(Boolean).join(', ');
+    const geoResp = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geoQuery)}&format=json&limit=1`,
+      { headers: { 'Accept-Language': 'en', 'User-Agent': '141vennU/1.0' } }
+    );
+    const geoData = await geoResp.json();
+
+    // Fallback: try just city/state if stadium name not found
+    let lat, lng;
+    if (geoData?.length) {
+      lat = parseFloat(geoData[0].lat);
+      lng = parseFloat(geoData[0].lon);
+    } else if (venue.city || venue.state) {
+      const cityResp = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent([venue.city, venue.state].filter(Boolean).join(', '))}&format=json&limit=1`,
+        { headers: { 'Accept-Language': 'en', 'User-Agent': '141vennU/1.0' } }
+      );
+      const cityData = await cityResp.json();
+      if (cityData?.length) {
+        lat = parseFloat(cityData[0].lat);
+        lng = parseFloat(cityData[0].lon);
+      }
+    }
+
+    if (!lat || !lng) {
+      mapEl.innerHTML = '<div class="map-loading">📍 Location not found for this venue</div>';
+      return;
+    }
+
+    // 2 ── Init Leaflet map
+    mapEl.innerHTML = ''; // clear loading spinner
+    const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false }).setView([lat, lng], 15);
+    _venueMapInstance = map;
+
+    // Dark-friendly OSM tile layer
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
+      maxZoom: 19,
+    }).addTo(map);
+
+    // 3 ── Stadium marker (red)
+    const stadiumIcon = L.divIcon({
+      className: '',
+      html: `<div style="background:#ef4444;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>`,
+      iconSize: [18, 18], iconAnchor: [9, 9],
+    });
+    L.marker([lat, lng], { icon: stadiumIcon })
+      .addTo(map)
+      .bindPopup(`<strong>${venue.name}</strong><div class="pop-type">🏟 Stadium</div>`);
+
+    // 4 ── Admin 141 Picks (gold) — from food_items in admin_scoresheet
+    const foodItems = venue.admin_scoresheet?.food_items || [];
+    let pickCount = 0;
+    const goldIcon = L.divIcon({
+      className: '',
+      html: `<div style="background:#f59e0b;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:8px">⭐</div>`,
+      iconSize: [16, 16], iconAnchor: [8, 8],
+    });
+
+    // Geocode each named food pick and place on map
+    for (const item of foodItems.slice(0, 6)) {
+      if (!item.name) continue;
+      try {
+        const pickQuery = `${item.name} near ${venue.name} ${venue.city || ''} ${venue.state || ''}`;
+        const pResp = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pickQuery)}&format=json&limit=1`,
+          { headers: { 'Accept-Language': 'en', 'User-Agent': '141vennU/1.0' } }
+        );
+        const pData = await pResp.json();
+        if (pData?.length) {
+          const pLat = parseFloat(pData[0].lat);
+          const pLng = parseFloat(pData[0].lon);
+          // Only place if within ~3 km of stadium
+          const dist = Math.hypot(pLat - lat, pLng - lng);
+          if (dist < 0.05) {
+            L.marker([pLat, pLng], { icon: goldIcon })
+              .addTo(map)
+              .bindPopup(`<strong>${item.name}</strong><div class="pop-type">⭐ 141 Pick${item.price ? ' · ' + item.price : ''}</div>`);
+            pickCount++;
+          }
+        }
+        await new Promise(r => setTimeout(r, 300)); // Nominatim rate limit: 1 req/s
+      } catch(e) { /* skip this pick if geocoding fails */ }
+    }
+
+    // 5 ── Nearby food via Overpass API (restaurants, bars, cafes within 800m)
+    const overpassQuery = `[out:json][timeout:15];
+      (
+        node["amenity"~"^(restaurant|bar|pub|cafe|fast_food|food_court|biergarten)$"](around:800,${lat},${lng});
+        way["amenity"~"^(restaurant|bar|pub|cafe|fast_food|food_court)$"](around:800,${lat},${lng});
+      );
+      out center 30;`;
+    const ovResp = await fetch(
+      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`
+    );
+    const ovData = await ovResp.json();
+    const elements = ovData?.elements || [];
+
+    const blueIcon = L.divIcon({
+      className: '',
+      html: `<div style="background:#3b82f6;width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.8);box-shadow:0 1px 5px rgba(0,0,0,.4)"></div>`,
+      iconSize: [12, 12], iconAnchor: [6, 6],
+    });
+    const amenityLabel = { restaurant:'Restaurant', bar:'Bar', pub:'Pub', cafe:'Café', fast_food:'Fast Food', food_court:'Food Court', biergarten:'Beer Garden' };
+
+    elements.forEach(el => {
+      const eLat = el.lat ?? el.center?.lat;
+      const eLng = el.lon ?? el.center?.lon;
+      const name = el.tags?.name;
+      if (!eLat || !eLng || !name) return;
+      const type = amenityLabel[el.tags?.amenity] || 'Food & Drink';
+      const cuisine = el.tags?.cuisine ? ` · ${el.tags.cuisine.replace(/_/g,' ')}` : '';
+      L.marker([eLat, eLng], { icon: blueIcon })
+        .addTo(map)
+        .bindPopup(`<strong>${name}</strong><div class="pop-type">${type}${cuisine}</div>`);
+    });
+
+    // 6 ── Update header count
+    const countEl = document.getElementById('venue-map-pick-count');
+    if (countEl) {
+      const total = elements.filter(e => e.tags?.name).length;
+      countEl.textContent = total ? `${total} spots found` : '';
+    }
+
+  } catch(e) {
+    console.error('initVenueMap error:', e);
+    if (mapEl) mapEl.innerHTML = '<div class="map-loading">⚠️ Map unavailable — check connection</div>';
+  }
 }
 
 // ── TAG SYSTEM ──
