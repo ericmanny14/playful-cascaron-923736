@@ -1148,6 +1148,12 @@ nav ul a:hover{color:var(--ink)}
           <div class="admin-field"><label>Transit</label><input type="text" id="adv-transit" placeholder="Monorail · 10 min walk"></div>
         </div>
 
+        <!-- Street address — used by the food map to pin the exact stadium location -->
+        <div class="admin-field">
+          <label>📍 Stadium Address <span style="font-weight:400;font-size:11px;color:var(--muted)">(used to place the map pin accurately)</span></label>
+          <input type="text" id="adv-address" placeholder="e.g. 1 Seahawks Way, Renton, WA 98056" style="width:100%">
+        </div>
+
         <div class="admin-field">
           <label>About This Venue</label>
           <textarea id="adv-description" placeholder="Write a description of this venue…"></textarea>
@@ -2995,7 +3001,7 @@ function admShowNewVenueForm() {
   if (venuesTabBtn) switchAdminTab('venues', venuesTabBtn);
   document.getElementById('adm-venue-edit-id').value = '';
   document.getElementById('adm-venue-form-title').textContent = '✏️ Add New Venue';
-  ['adv-name','adv-city','adv-state','adv-sport','adv-team','adv-surface','adv-roof','adv-parking','adv-transit','adv-description','adv-video-url','adv-reviewer-name'].forEach(id => {
+  ['adv-name','adv-city','adv-state','adv-sport','adv-team','adv-surface','adv-roof','adv-parking','adv-transit','adv-address','adv-description','adv-video-url','adv-reviewer-name'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = (id === 'adv-reviewer-name') ? '141 venn-U Official' : '';
   });
@@ -3036,6 +3042,7 @@ async function admEditVenue(venueId) {
   document.getElementById('adv-parking').value = v.parking || '';
   document.getElementById('adv-transit').value = v.transit || '';
   document.getElementById('adv-description').value = v.description || '';
+  document.getElementById('adv-address').value = v.address || '';
   // Read review content from admin_scoresheet (JSONB) — that's where saves now write.
   // Fall back to legacy separate columns for existing data that was saved the old way.
   const sc = v.admin_scoresheet;
@@ -3154,6 +3161,7 @@ async function saveAdminVenue() {
       roof:        document.getElementById('adv-roof')?.value.trim()        || null,
       parking:     document.getElementById('adv-parking')?.value.trim()     || null,
       transit:     document.getElementById('adv-transit')?.value.trim()     || null,
+      address:     document.getElementById('adv-address')?.value.trim()     || null,
       description: document.getElementById('adv-description')?.value.trim() || null,
       is_featured: document.getElementById('adv-featured')?.checked ?? false,
       tags:        tags.length ? tags : null,
@@ -3162,12 +3170,22 @@ async function saveAdminVenue() {
 
     console.log('[saveAdminVenue] payload:', JSON.stringify(payload));
 
-    // Build the Supabase call — always pass the abort signal so the safety timer can cancel it
+    // Quick session check — if the auth token is stale the write will hang forever
+    const { data: sessionData } = await sb.auth.getSession();
+    if (!sessionData?.session) {
+      showToast('❌ Session expired — please sign out and sign back in', 'error');
+      return;
+    }
+    console.log('[saveAdminVenue] session valid, token expires:', new Date(sessionData.session.expires_at * 1000).toLocaleTimeString());
+
+    // Build the Supabase call.
+    // abortSignal is available in supabase-js v2.x — lets the safety timer kill the request.
     const runDbCall = async (p) => {
       const q = id
         ? sb.from('venues').update(p).eq('id', id).select('id')
         : sb.from('venues').insert(p).select('id');
-      return q.abortSignal(ctrl.signal);
+      // Use abortSignal if available (v2.x), otherwise fall back gracefully
+      return (typeof q.abortSignal === 'function') ? q.abortSignal(ctrl.signal) : q;
     };
 
     let { data: saved, error } = await runDbCall(payload);
@@ -3176,12 +3194,14 @@ async function saveAdminVenue() {
     // Fall back to a minimal safe payload so the save still works.
     if (error?.code === '42703' || error?.message?.includes('column')) {
       console.warn('[saveAdminVenue] schema column missing, retrying with minimal payload:', error.message);
+      // Retry with only known-safe columns (drop anything that might be missing from schema)
       const safePayload = {
-        name: payload.name,
-        city:  payload.city,
-        state: payload.state,
-        sport: payload.sport,
-        team:  payload.team,
+        name:        payload.name,
+        city:        payload.city,
+        state:       payload.state,
+        sport:       payload.sport,
+        team:        payload.team,
+        address:     payload.address,
         is_featured: payload.is_featured,
         ...(payload.admin_scoresheet && { admin_scoresheet: payload.admin_scoresheet }),
       };
@@ -3381,11 +3401,13 @@ async function initVenueMap(venue) {
 
   try {
     // ── 1. Geocode the stadium (Nominatim, 8s timeout) ──────────────────
+    // If admin entered a full street address use it first — far more accurate than name+city.
     let lat = null, lng = null;
     const queries = [
-      [venue.name, venue.city, venue.state].filter(Boolean).join(', '),
-      [venue.city, venue.state].filter(Boolean).join(', '),
-    ];
+      venue.address,                                                      // "1 Seahawks Way, Renton, WA"
+      [venue.name, venue.city, venue.state].filter(Boolean).join(', '),  // "Lumen Field, Seattle, WA"
+      [venue.city, venue.state].filter(Boolean).join(', '),              // "Seattle, WA"
+    ].filter(Boolean);
     for (const q of queries) {
       if (lat) break;
       try {
