@@ -3166,48 +3166,78 @@ async function saveAdminVenue() {
       ...(scoresheetPayload && { admin_scoresheet: scoresheetPayload }),
     };
 
-    // No async session check here — getSession() is itself a network call and can trigger
-    // the timeout before the actual save starts. currentUser is set synchronously on login.
     if (!currentUser) {
       showToast('❌ Session expired — please sign out and sign back in', 'error');
       return;
     }
-    console.log('[saveAdminVenue] starting DB call, id:', id || '(new)', 'fields:', Object.keys(payload).join(', '));
 
-    const runDbCall = async (p) => {
-      const q = id
-        ? sb.from('venues').update(p).eq('id', id).select('id')
-        : sb.from('venues').insert(p).select('id');
-      return (typeof q.abortSignal === 'function') ? q.abortSignal(ctrl.signal) : q;
+    // ── Use native fetch instead of the Supabase SDK for writes ─────────────
+    // The SDK's internal auth-refresh loop hangs on this connection even though
+    // plain fetch to the same endpoint works fine (confirmed via Network tab).
+    // We pull the stored access token directly from localStorage and call the
+    // Supabase REST API ourselves — same thing the raw fetch test proved works.
+    const SURL = 'https://jugdgtyhxpqfoowijtbt.supabase.co';
+    const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1Z2RndHloeHBxZm9vd2lqdGJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MzA4MTksImV4cCI6MjA4OTEwNjgxOX0.m0aI2THlLSLXsoGQPMCmU1BnFiVnhhrbCi7qCefyVvY';
+
+    let accessToken = null;
+    try {
+      const raw = localStorage.getItem('vennu-auth');
+      accessToken = raw ? JSON.parse(raw)?.access_token : null;
+    } catch(e) {}
+
+    if (!accessToken) {
+      showToast('❌ Session expired — please sign out and sign back in', 'error');
+      return;
+    }
+
+    const fetchHeaders = {
+      'Content-Type': 'application/json',
+      'apikey': SKEY,
+      'Authorization': `Bearer ${accessToken}`,
+      'Prefer': 'return=representation',
     };
 
-    let { data: saved, error } = await runDbCall(payload);
-    console.log('[saveAdminVenue] DB response — data:', saved, 'error:', error);
+    const runDbCall = async (p) => {
+      const url = id
+        ? `${SURL}/rest/v1/venues?id=eq.${encodeURIComponent(id)}`
+        : `${SURL}/rest/v1/venues`;
+      const resp = await fetch(url, {
+        method: id ? 'PATCH' : 'POST',
+        headers: fetchHeaders,
+        body: JSON.stringify(p),
+        signal: ctrl.signal,
+      });
+      const body = await resp.json().catch(() => ([]));
+      if (!resp.ok) return { data: null, error: body };
+      const rows = Array.isArray(body) ? body : (body ? [body] : []);
+      return { data: rows, error: null };
+    };
 
-    // 42703 = column doesn't exist in the schema yet.
-    // Dynamically remove the offending column (parsed from the error message) and retry once.
-    if (error?.code === '42703') {
-      const badCol = error.message.match(/column "?(\w+)"?/)?.[1];
+    console.log('[saveAdminVenue] starting fetch, id:', id || '(new)');
+    let { data: saved, error } = await runDbCall(payload);
+    console.log('[saveAdminVenue] response — data:', saved, 'error:', error);
+
+    // 42703 = column doesn't exist yet — remove just that column and retry
+    if (error?.code === '42703' || error?.message?.includes('column')) {
+      const badCol = (error.message || '').match(/column "?(\w+)"?/)?.[1];
       console.warn('[saveAdminVenue] missing column:', badCol, '— retrying without it');
       const retryPayload = { ...payload };
       if (badCol) delete retryPayload[badCol];
       ({ data: saved, error } = await runDbCall(retryPayload));
-      console.log('[saveAdminVenue] retry response — data:', saved, 'error:', error);
+      console.log('[saveAdminVenue] retry — data:', saved, 'error:', error);
     }
 
-    if (timedOut) return; // safety timer already fired, don't double-toast
+    if (timedOut) return;
 
     if (error) {
       _venueCache = null;
-      console.error('[saveAdminVenue] Supabase error:', error);
-      showToast('Save error: ' + error.message, 'error');
+      console.error('[saveAdminVenue] error:', error);
+      showToast('Save error: ' + (error.message || JSON.stringify(error)), 'error');
       return;
     }
-    // Empty array = RLS silently blocked the write
     if (!saved?.length) {
       _venueCache = null;
-      const action = id ? 'UPDATE' : 'INSERT';
-      showToast(`❌ Save blocked — add an admin ${action} policy for the venues table in Supabase`, 'error');
+      showToast('❌ Save was blocked by Supabase — check RLS policies for venues', 'error');
       return;
     }
 
