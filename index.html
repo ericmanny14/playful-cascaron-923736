@@ -1932,8 +1932,23 @@ async function loadVenueDetail(venueId, venueName) {
     if (listEl) listEl.innerHTML = reviews.map((r, i) => buildReviewCard(r, i)).join('');
 
     loadAdminSpotlight(venueId);
-    // Load map in background — non-blocking so reviews render immediately
-    initVenueMap(venue).catch(e => console.error('map error:', e));
+    // Map: auto-load only when admin has pinned places (guaranteed content worth showing).
+    // Otherwise show card with on-demand button so a slow connection never freezes the page.
+    _venueMapData = venue;
+    const hasAdminPicks = (venue.admin_scoresheet?.map_places?.length || 0) > 0;
+    if (hasAdminPicks) {
+      initVenueMap(venue).catch(e => console.error('map error:', e));
+    } else {
+      const card = document.getElementById('venue-map-card');
+      const mapEl = document.getElementById('venue-map');
+      if (card && mapEl) {
+        card.style.display = 'block';
+        mapEl.innerHTML = `<div class="map-loading" style="flex-direction:column;gap:14px">
+          <div style="font-size:13px;color:var(--muted);text-align:center">🍔 Nearby restaurants &amp; bars</div>
+          <button class="btn btn-outline" style="padding:9px 20px;font-size:13px" onclick="loadVenueMapOnDemand()">🗺 Show Food Map</button>
+        </div>`;
+      }
+    }
   } catch(err) {
     console.error('loadVenueDetail error:', err);
     showToast('Error loading venue. Please try again.', 'error');
@@ -2981,6 +2996,7 @@ function admShowNewVenueForm() {
   const reviewBodyEl = document.getElementById('adv-review-body'); if (reviewBodyEl) reviewBodyEl.innerHTML = '';
   const tagsWrap = document.getElementById('adv-tags-wrap'); if (tagsWrap) tagsWrap.querySelectorAll('.tag-pill').forEach(t=>t.remove());
   loadMapPlaceRows([]);
+  _editingVenueScoresheet = null; // no existing scoresheet for a new venue
   const pdfCurrent = document.getElementById('adv-pdf-current'); if (pdfCurrent) pdfCurrent.style.display = 'none';
   const pdfRemove = document.getElementById('adv-pdf-remove'); if (pdfRemove) pdfRemove.value = '0';
   const pdfInput = document.getElementById('adv-pdf-input'); if (pdfInput) pdfInput.value = '';
@@ -3013,6 +3029,7 @@ async function admEditVenue(venueId) {
   // Read review content from admin_scoresheet (JSONB) — that's where saves now write.
   // Fall back to legacy separate columns for existing data that was saved the old way.
   const sc = v.admin_scoresheet;
+  _editingVenueScoresheet = sc || null; // preserve all existing scoresheet fields (incl. food_items)
   document.getElementById('adv-video-url').value = sc?.video_url || v.admin_review_video || '';
   document.getElementById('adv-reviewer-name').value = v.admin_reviewer_name || '141 venn-U Official';
   document.getElementById('adv-featured').checked = v.is_featured || false;
@@ -3091,6 +3108,8 @@ async function saveAdminVenue() {
     const mapPlaces = getMapPlaces(); // admin-pinned map spots
     const hasAnyReviewData = officialScore != null || catPre != null || writtenReview || embedUrl || mapPlaces.length;
     const scoresheetPayload = hasAnyReviewData ? {
+      // Spread existing scoresheet first so unmapped fields (e.g. food_items) are preserved
+      ...(_editingVenueScoresheet || {}),
       total_score:    officialScore,
       cat_pregame:    catPre,
       cat_atmosphere: catAtm,
@@ -3314,6 +3333,8 @@ async function admLoadUsers() {
 // VENUE FOOD MAP (Leaflet + OpenStreetMap)
 // ═══════════════════════════════════
 let _venueMapInstance = null;
+let _venueMapData = null;           // current venue for on-demand map loading
+let _editingVenueScoresheet = null; // preserves existing scoresheet fields on save
 
 // Fetch with a hard timeout — never hangs the page
 async function _fetchWithTimeout(url, opts = {}, ms = 8000) {
@@ -3441,29 +3462,84 @@ async function initVenueMap(venue) {
   }
 }
 
+// On-demand map loader — called when user taps "Show Food Map" button
+function loadVenueMapOnDemand() {
+  if (!_venueMapData) return;
+  const mapEl = document.getElementById('venue-map');
+  if (mapEl) mapEl.innerHTML = '<div class="map-loading"><span class="spinner"></span> Loading map…</div>';
+  initVenueMap(_venueMapData).catch(e => {
+    console.error('map error:', e);
+    if (mapEl) mapEl.innerHTML = '<div class="map-loading">⚠️ Map failed to load — check your connection</div>';
+  });
+}
+
 // ── MAP PLACES (admin) ──
+// Uses DOM methods instead of innerHTML so special chars in place names never break HTML attributes.
 function addMapPlaceRow(place = {}) {
   const list = document.getElementById('adv-map-places-list');
-  if (!list) return;
-  const row = document.createElement('div');
-  row.className = 'map-place-row';
-  row.style.cssText = 'display:grid;grid-template-columns:1fr 110px 80px 80px auto;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px';
-  row.innerHTML = `
-    <input type="text" placeholder="Place name (e.g. McConnell's Ice Cream)" value="${place.name||''}"
-      style="background:none;border:none;outline:none;color:var(--ink);font-size:13px;font-family:'Barlow',sans-serif" data-field="name">
-    <select data-field="type" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;color:var(--ink);font-size:12px;padding:4px 6px">
-      <option value="restaurant" ${place.type==='restaurant'?'selected':''}>Restaurant</option>
-      <option value="bar"        ${place.type==='bar'?'selected':''}>Bar</option>
-      <option value="cafe"       ${place.type==='cafe'?'selected':''}>Café</option>
-      <option value="fast_food"  ${place.type==='fast_food'?'selected':''}>Fast Food</option>
-      <option value="other"      ${place.type==='other'?'selected':''}>Other</option>
-    </select>
-    <input type="number" placeholder="Lat" step="any" value="${place.lat||''}"
-      style="background:none;border:1px solid var(--border);border-radius:5px;padding:4px 6px;color:var(--ink);font-size:12px;width:100%;box-sizing:border-box" data-field="lat">
-    <input type="number" placeholder="Lng" step="any" value="${place.lng||''}"
-      style="background:none;border:1px solid var(--border);border-radius:5px;padding:4px 6px;color:var(--ink);font-size:12px;width:100%;box-sizing:border-box" data-field="lng">
-    <button onclick="this.closest('.map-place-row').remove()" style="background:none;border:none;color:var(--dislike);cursor:pointer;font-size:16px;padding:0 4px" title="Remove">✕</button>`;
-  list.appendChild(row);
+  if (!list) { console.warn('adv-map-places-list not found'); return; }
+  try {
+    const row = document.createElement('div');
+    row.className = 'map-place-row';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 110px 80px 80px auto;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px';
+
+    // Name input — set via .value, not innerHTML, so quotes/apostrophes are safe
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = "Place name (e.g. McConnell's Ice Cream)";
+    nameInput.value = place.name || '';
+    nameInput.style.cssText = 'background:none;border:none;outline:none;color:var(--ink);font-size:13px;font-family:\'Barlow\',sans-serif;min-width:0';
+    nameInput.dataset.field = 'name';
+
+    // Type select
+    const typeSelect = document.createElement('select');
+    typeSelect.dataset.field = 'type';
+    typeSelect.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:5px;color:var(--ink);font-size:12px;padding:4px 6px';
+    const typeMap = { restaurant:'Restaurant', bar:'Bar', cafe:'Café', fast_food:'Fast Food', other:'Other' };
+    Object.entries(typeMap).forEach(([val, label]) => {
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = label;
+      if ((place.type || 'restaurant') === val) opt.selected = true;
+      typeSelect.appendChild(opt);
+    });
+
+    // Lat input
+    const latInput = document.createElement('input');
+    latInput.type = 'number';
+    latInput.placeholder = 'Lat';
+    latInput.step = 'any';
+    if (place.lat != null && !isNaN(place.lat)) latInput.value = place.lat;
+    latInput.style.cssText = 'background:none;border:1px solid var(--border);border-radius:5px;padding:4px 6px;color:var(--ink);font-size:12px;width:100%;box-sizing:border-box';
+    latInput.dataset.field = 'lat';
+
+    // Lng input
+    const lngInput = document.createElement('input');
+    lngInput.type = 'number';
+    lngInput.placeholder = 'Lng';
+    lngInput.step = 'any';
+    if (place.lng != null && !isNaN(place.lng)) lngInput.value = place.lng;
+    lngInput.style.cssText = 'background:none;border:1px solid var(--border);border-radius:5px;padding:4px 6px;color:var(--ink);font-size:12px;width:100%;box-sizing:border-box';
+    lngInput.dataset.field = 'lng';
+
+    // Remove button — event listener instead of onclick attr
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove';
+    removeBtn.style.cssText = 'background:none;border:none;color:var(--dislike);cursor:pointer;font-size:16px;padding:0 4px;flex-shrink:0';
+    removeBtn.addEventListener('click', () => row.remove());
+
+    row.appendChild(nameInput);
+    row.appendChild(typeSelect);
+    row.appendChild(latInput);
+    row.appendChild(lngInput);
+    row.appendChild(removeBtn);
+    list.appendChild(row);
+  } catch(e) {
+    console.error('addMapPlaceRow error:', e);
+    showToast('Error adding place row: ' + e.message, 'error');
+  }
 }
 
 function getMapPlaces() {
