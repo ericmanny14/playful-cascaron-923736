@@ -1826,19 +1826,23 @@ async function loadVenueDetail(venueId, venueName) {
 
     setEl('venue-detail-name', venueName || 'Loading...');
 
-    // Run venue + reviews queries in parallel
+    // Run venue + reviews queries in parallel — abort after 12 s so a bad connection never freezes
+    const vdCtrl = new AbortController();
+    const vdTimeout = setTimeout(() => vdCtrl.abort(), 12000);
     const [
       { data: venue, error: venueError },
       { data: reviews, error: reviewsError }
     ] = await Promise.all([
-      sb.from('venues').select('*').eq('id', venueId).single(),
+      sb.from('venues').select('*').eq('id', venueId).single().abortSignal(vdCtrl.signal),
       sb.from('reviews')
         .select('*, profiles(display_name, username, scout_level)')
         .eq('venue_id', venueId)
         .eq('is_hidden', false)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false })
+        .abortSignal(vdCtrl.signal)
     ]);
+    clearTimeout(vdTimeout);
 
     if (venueError || !venue) {
       showToast('Venue not found', 'error');
@@ -1950,6 +1954,10 @@ async function loadVenueDetail(venueId, venueName) {
       }
     }
   } catch(err) {
+    if (err?.name === 'AbortError') {
+      showToast('⏱ Venue took too long to load — check your connection', 'error');
+      return;
+    }
     console.error('loadVenueDetail error:', err);
     showToast('Error loading venue. Please try again.', 'error');
   }
@@ -3008,7 +3016,9 @@ function admShowNewVenueForm() {
 
 async function admEditVenue(venueId) {
   try {
-  const { data: v } = await sb.from('venues').select('*').eq('id', venueId).single();
+  const editCtrl = new AbortController();
+  setTimeout(() => editCtrl.abort(), 10000);
+  const { data: v } = await sb.from('venues').select('*').eq('id', venueId).single().abortSignal(editCtrl.signal);
   if (!v) return;
   // Switch to Venues tab so the form is visible
   const venuesTabBtn = document.querySelector('.admin-tab[onclick*="venues"]');
@@ -3071,13 +3081,16 @@ async function saveAdminVenue() {
   if (saveBtn?.disabled) return;
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
+  // AbortController lets the safety timer actually cancel the pending network request,
+  // not just show a toast while the request keeps hanging in the background.
+  const ctrl = new AbortController();
   let timedOut = false;
-  // Safety net: re-enable button AND show timeout toast if Supabase never responds
   const safetyTimer = setTimeout(() => {
     timedOut = true;
+    ctrl.abort(); // ← kill the hanging Supabase fetch
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save Venue'; }
     showToast('⏱ Save timed out — check your connection and try again', 'error');
-  }, 12000);
+  }, 10000);
 
   try {
     if (!isAdmin()) { showToast('Admin access required', 'error'); return; }
@@ -3149,11 +3162,12 @@ async function saveAdminVenue() {
 
     console.log('[saveAdminVenue] payload:', JSON.stringify(payload));
 
+    // Build the Supabase call — always pass the abort signal so the safety timer can cancel it
     const runDbCall = async (p) => {
-      const call = id
+      const q = id
         ? sb.from('venues').update(p).eq('id', id).select('id')
         : sb.from('venues').insert(p).select('id');
-      return call;
+      return q.abortSignal(ctrl.signal);
     };
 
     let { data: saved, error } = await runDbCall(payload);
@@ -3202,6 +3216,8 @@ async function saveAdminVenue() {
     if (formEl) formEl.style.display = 'none';
 
   } catch(e) {
+    // AbortError means the safety timer cancelled the request — toast already shown
+    if (e?.name === 'AbortError' || ctrl.signal.aborted) return;
     console.error('[saveAdminVenue] caught exception:', e);
     _venueCache = null;
     if (!timedOut) showToast(e.message || 'Error saving venue', 'error');
