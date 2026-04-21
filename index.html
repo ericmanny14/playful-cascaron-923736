@@ -1227,6 +1227,48 @@ let _venueCache = null;        // cached venue list for browse
 let _venueCacheTime = 0;       // timestamp of last fetch
 const VENUE_CACHE_TTL = 60 * 1000; // 1 minute — short enough to see edits quickly
 
+// ── AUTO-LOGOUT (inactivity) ──────────────────────────────────────────────────
+const AUTO_LOGOUT_INACTIVE_MS = 60 * 60 * 1000;   // 60 min of no activity → sign out
+const AUTO_LOGOUT_WARN_MS     = 58 * 60 * 1000;   // warn 2 min before (58 min)
+let _autoLogoutTimer     = null;
+let _autoLogoutWarnTimer = null;
+let _autoLogoutBound     = false; // track whether listeners are attached
+
+function _resetAutoLogout() {
+  if (!currentUser) return;
+  clearTimeout(_autoLogoutTimer);
+  clearTimeout(_autoLogoutWarnTimer);
+  _autoLogoutWarnTimer = setTimeout(() => {
+    showToast('⚠️ You\'ll be signed out in 2 minutes due to inactivity.', 'error');
+  }, AUTO_LOGOUT_WARN_MS);
+  _autoLogoutTimer = setTimeout(async () => {
+    showToast('Session expired — signing you out.', 'error');
+    await signOut();
+  }, AUTO_LOGOUT_INACTIVE_MS);
+}
+
+function startAutoLogout() {
+  _resetAutoLogout();
+  if (!_autoLogoutBound) {
+    ['click','keydown','touchstart','scroll'].forEach(evt =>
+      document.addEventListener(evt, _resetAutoLogout, { passive: true })
+    );
+    _autoLogoutBound = true;
+  }
+}
+
+function stopAutoLogout() {
+  clearTimeout(_autoLogoutTimer);
+  clearTimeout(_autoLogoutWarnTimer);
+  if (_autoLogoutBound) {
+    ['click','keydown','touchstart','scroll'].forEach(evt =>
+      document.removeEventListener(evt, _resetAutoLogout)
+    );
+    _autoLogoutBound = false;
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ═══════════════════════════════════
 // PAGE & UI HELPERS
 // ═══════════════════════════════════
@@ -1400,6 +1442,7 @@ async function signIn() {
 }
 
 async function signOut() {
+  stopAutoLogout(); // always stop the inactivity timer on sign-out
   const dash = document.getElementById('admin-dash');
   if (dash) dash.classList.remove('open');
   currentUser = null; currentProfile = null;
@@ -2675,12 +2718,16 @@ sb.auth.onAuthStateChange(async (event, session) => {
       // Re-render nav with profile name now available
       updateNavUI(currentUser);
       if (event === 'SIGNED_IN') {
+        startAutoLogout(); // begin inactivity countdown
         showToast('👋 Welcome' + (currentProfile?.display_name ? ', ' + currentProfile.display_name + '!' : '!'));
         // Refresh home venue grid so auth-gated content is ready
         if (document.querySelector('#page-home.active')) loadHomeVenues();
+      } else if (event === 'TOKEN_REFRESHED') {
+        startAutoLogout(); // token refreshed = still active — reset the timer
       }
     }
   } else if (event === 'SIGNED_OUT') {
+    stopAutoLogout(); // clear inactivity timers
     currentUser = null;
     currentProfile = null;
     updateNavUI(null);
@@ -2702,6 +2749,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
       .select('*').eq('id', currentUser.id).single();
     currentProfile = profile;
     updateNavUI(currentUser);
+    startAutoLogout(); // user already logged in on page load — start inactivity timer
 
     // Clean hash from URL after OAuth redirect
     if (window.location.hash) {
