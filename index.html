@@ -3088,16 +3088,14 @@ async function saveAdminVenue() {
   if (saveBtn?.disabled) return;
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
-  // AbortController lets the safety timer actually cancel the pending network request,
-  // not just show a toast while the request keeps hanging in the background.
   const ctrl = new AbortController();
   let timedOut = false;
   const safetyTimer = setTimeout(() => {
     timedOut = true;
-    ctrl.abort(); // ← kill the hanging Supabase fetch
+    ctrl.abort();
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save Venue'; }
     showToast('⏱ Save timed out — check your connection and try again', 'error');
-  }, 10000);
+  }, 20000); // 20 s — generous enough for slow connections
 
   try {
     if (!isAdmin()) { showToast('Admin access required', 'error'); return; }
@@ -3168,44 +3166,33 @@ async function saveAdminVenue() {
       ...(scoresheetPayload && { admin_scoresheet: scoresheetPayload }),
     };
 
-    console.log('[saveAdminVenue] payload:', JSON.stringify(payload));
-
-    // Quick session check — if the auth token is stale the write will hang forever
-    const { data: sessionData } = await sb.auth.getSession();
-    if (!sessionData?.session) {
+    // No async session check here — getSession() is itself a network call and can trigger
+    // the timeout before the actual save starts. currentUser is set synchronously on login.
+    if (!currentUser) {
       showToast('❌ Session expired — please sign out and sign back in', 'error');
       return;
     }
-    console.log('[saveAdminVenue] session valid, token expires:', new Date(sessionData.session.expires_at * 1000).toLocaleTimeString());
+    console.log('[saveAdminVenue] starting DB call, id:', id || '(new)', 'fields:', Object.keys(payload).join(', '));
 
-    // Build the Supabase call.
-    // abortSignal is available in supabase-js v2.x — lets the safety timer kill the request.
     const runDbCall = async (p) => {
       const q = id
         ? sb.from('venues').update(p).eq('id', id).select('id')
         : sb.from('venues').insert(p).select('id');
-      // Use abortSignal if available (v2.x), otherwise fall back gracefully
       return (typeof q.abortSignal === 'function') ? q.abortSignal(ctrl.signal) : q;
     };
 
     let { data: saved, error } = await runDbCall(payload);
+    console.log('[saveAdminVenue] DB response — data:', saved, 'error:', error);
 
-    // If a column in the payload doesn't exist in the schema, Supabase returns error code 42703.
-    // Fall back to a minimal safe payload so the save still works.
-    if (error?.code === '42703' || error?.message?.includes('column')) {
-      console.warn('[saveAdminVenue] schema column missing, retrying with minimal payload:', error.message);
-      // Retry with only known-safe columns (drop anything that might be missing from schema)
-      const safePayload = {
-        name:        payload.name,
-        city:        payload.city,
-        state:       payload.state,
-        sport:       payload.sport,
-        team:        payload.team,
-        address:     payload.address,
-        is_featured: payload.is_featured,
-        ...(payload.admin_scoresheet && { admin_scoresheet: payload.admin_scoresheet }),
-      };
-      ({ data: saved, error } = await runDbCall(safePayload));
+    // 42703 = column doesn't exist in the schema yet.
+    // Dynamically remove the offending column (parsed from the error message) and retry once.
+    if (error?.code === '42703') {
+      const badCol = error.message.match(/column "?(\w+)"?/)?.[1];
+      console.warn('[saveAdminVenue] missing column:', badCol, '— retrying without it');
+      const retryPayload = { ...payload };
+      if (badCol) delete retryPayload[badCol];
+      ({ data: saved, error } = await runDbCall(retryPayload));
+      console.log('[saveAdminVenue] retry response — data:', saved, 'error:', error);
     }
 
     if (timedOut) return; // safety timer already fired, don't double-toast
