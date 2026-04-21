@@ -1217,6 +1217,14 @@ nav ul a:hover{color:var(--ink)}
           <div class="admin-field"><label>Reviewed By</label><input type="text" id="adv-reviewer-name" value="141 venn-U Official"></div>
         </div>
 
+        <!-- 141 MAP PICKS -->
+        <div style="margin-bottom:20px">
+          <label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px;font-family:'Space Mono',monospace">📍 141 Map Picks <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:var(--muted)">(gold pins on the food map)</span></label>
+          <div id="adv-map-places-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+          <button type="button" class="btn btn-outline" style="padding:7px 14px;font-size:12px" onclick="addMapPlaceRow()">+ Add a Place</button>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-family:'Space Mono',monospace">Tip: paste coordinates from Google Maps (right-click a location → copy lat/long)</div>
+        </div>
+
         <div style="display:flex;gap:10px">
           <button class="btn btn-grad" style="flex:1;padding:12px" onclick="saveAdminVenue()">💾 Save Venue</button>
           <button class="btn btn-outline" style="padding:12px 20px" onclick="document.getElementById('adm-venue-form').style.display='none'">Cancel</button>
@@ -1480,16 +1488,16 @@ async function signIn() {
 }
 
 async function signOut() {
-  stopAutoLogout(); // always stop the inactivity timer on sign-out
+  stopAutoLogout();
   const dash = document.getElementById('admin-dash');
   if (dash) dash.classList.remove('open');
   currentUser = null; currentProfile = null;
-  _venueCache = null; // bust venue cache so next login starts fresh
-  try { await sb.auth.signOut({ scope: 'local' }); } catch(e) {}
-  // Nuclear clear — wipe ALL local + session storage so no token can survive
+  _venueCache = null;
+  // Fire-and-forget — never await signOut; a slow/hanging network call
+  // would block window.location.replace() and make the button feel broken
+  sb.auth.signOut({ scope: 'local' }).catch(() => {});
   try { localStorage.clear(); } catch(e) {}
   try { sessionStorage.clear(); } catch(e) {}
-  // Hard reload bypassing browser cache
   window.location.replace(window.location.pathname + '?_=' + Date.now());
 }
 
@@ -2972,6 +2980,7 @@ function admShowNewVenueForm() {
   const featuredEl = document.getElementById('adv-featured'); if (featuredEl) featuredEl.checked = false;
   const reviewBodyEl = document.getElementById('adv-review-body'); if (reviewBodyEl) reviewBodyEl.innerHTML = '';
   const tagsWrap = document.getElementById('adv-tags-wrap'); if (tagsWrap) tagsWrap.querySelectorAll('.tag-pill').forEach(t=>t.remove());
+  loadMapPlaceRows([]);
   const pdfCurrent = document.getElementById('adv-pdf-current'); if (pdfCurrent) pdfCurrent.style.display = 'none';
   const pdfRemove = document.getElementById('adv-pdf-remove'); if (pdfRemove) pdfRemove.value = '0';
   const pdfInput = document.getElementById('adv-pdf-input'); if (pdfInput) pdfInput.value = '';
@@ -3009,6 +3018,7 @@ async function admEditVenue(venueId) {
   document.getElementById('adv-featured').checked = v.is_featured || false;
   document.getElementById('adv-review-body').innerHTML = sc?.written_review || v.admin_review_text || '';
   document.getElementById('adv-official-score').value = sc?.total_score != null ? sc.total_score : '';
+  loadMapPlaceRows(sc?.map_places || []);
   document.getElementById('adv-score-pre').value  = sc?.cat_pregame    != null ? sc.cat_pregame    : '';
   document.getElementById('adv-score-atm').value  = sc?.cat_atmosphere != null ? sc.cat_atmosphere : '';
   document.getElementById('adv-score-com').value  = sc?.cat_comfort    != null ? sc.cat_comfort    : '';
@@ -3078,7 +3088,8 @@ async function saveAdminVenue() {
     }
 
     const writtenReview = document.getElementById('adv-review-body')?.innerHTML?.trim() || null;
-    const hasAnyReviewData = officialScore != null || catPre != null || writtenReview || embedUrl;
+    const mapPlaces = getMapPlaces(); // admin-pinned map spots
+    const hasAnyReviewData = officialScore != null || catPre != null || writtenReview || embedUrl || mapPlaces.length;
     const scoresheetPayload = hasAnyReviewData ? {
       total_score:    officialScore,
       cat_pregame:    catPre,
@@ -3089,6 +3100,7 @@ async function saveAdminVenue() {
       cat_postgame:   catPost,
       written_review: writtenReview,
       video_url:      embedUrl,
+      map_places:     mapPlaces.length ? mapPlaces : null,
     } : null;
 
     // Collect tags from DOM pills
@@ -3301,14 +3313,28 @@ async function admLoadUsers() {
 // ═══════════════════════════════════
 // VENUE FOOD MAP (Leaflet + OpenStreetMap)
 // ═══════════════════════════════════
-let _venueMapInstance = null; // track active Leaflet map so we can destroy it on next load
+let _venueMapInstance = null;
+
+// Fetch with a hard timeout — never hangs the page
+async function _fetchWithTimeout(url, opts = {}, ms = 8000) {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { ...opts, signal: ctrl.signal });
+    clearTimeout(tid);
+    return r;
+  } catch(e) {
+    clearTimeout(tid);
+    throw e;
+  }
+}
 
 async function initVenueMap(venue) {
   const card = document.getElementById('venue-map-card');
   const mapEl = document.getElementById('venue-map');
   if (!card || !mapEl) return;
 
-  // Destroy previous map instance to avoid "container already initialized" error
+  // Destroy previous Leaflet instance — prevents "already initialized" crash
   if (_venueMapInstance) {
     try { _venueMapInstance.remove(); } catch(e) {}
     _venueMapInstance = null;
@@ -3317,135 +3343,145 @@ async function initVenueMap(venue) {
   card.style.display = 'block';
 
   try {
-    // 1 ── Geocode the stadium via Nominatim (OSM free geocoder)
-    const geoQuery = [venue.name, venue.city, venue.state].filter(Boolean).join(', ');
-    const geoResp = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geoQuery)}&format=json&limit=1`,
-      { headers: { 'Accept-Language': 'en', 'User-Agent': '141vennU/1.0' } }
-    );
-    const geoData = await geoResp.json();
-
-    // Fallback: try just city/state if stadium name not found
-    let lat, lng;
-    if (geoData?.length) {
-      lat = parseFloat(geoData[0].lat);
-      lng = parseFloat(geoData[0].lon);
-    } else if (venue.city || venue.state) {
-      const cityResp = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent([venue.city, venue.state].filter(Boolean).join(', '))}&format=json&limit=1`,
-        { headers: { 'Accept-Language': 'en', 'User-Agent': '141vennU/1.0' } }
-      );
-      const cityData = await cityResp.json();
-      if (cityData?.length) {
-        lat = parseFloat(cityData[0].lat);
-        lng = parseFloat(cityData[0].lon);
-      }
+    // ── 1. Geocode the stadium (Nominatim, 8s timeout) ──────────────────
+    let lat = null, lng = null;
+    const queries = [
+      [venue.name, venue.city, venue.state].filter(Boolean).join(', '),
+      [venue.city, venue.state].filter(Boolean).join(', '),
+    ];
+    for (const q of queries) {
+      if (lat) break;
+      try {
+        const r = await _fetchWithTimeout(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&addressdetails=0`,
+          {}, 8000
+        );
+        const d = await r.json();
+        if (d?.length) { lat = parseFloat(d[0].lat); lng = parseFloat(d[0].lon); }
+      } catch(e) { /* try next query */ }
     }
 
     if (!lat || !lng) {
-      mapEl.innerHTML = '<div class="map-loading">📍 Location not found for this venue</div>';
+      mapEl.innerHTML = '<div class="map-loading">📍 No location found — add a City/State to this venue in the admin panel</div>';
       return;
     }
 
-    // 2 ── Init Leaflet map
-    mapEl.innerHTML = ''; // clear loading spinner
+    // ── 2. Init map ──────────────────────────────────────────────────────
+    mapEl.innerHTML = '';
     const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false }).setView([lat, lng], 15);
     _venueMapInstance = map;
 
-    // Dark-friendly OSM tile layer
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>',
       maxZoom: 19,
     }).addTo(map);
 
-    // 3 ── Stadium marker (red)
-    const stadiumIcon = L.divIcon({
-      className: '',
-      html: `<div style="background:#ef4444;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>`,
-      iconSize: [18, 18], iconAnchor: [9, 9],
-    });
-    L.marker([lat, lng], { icon: stadiumIcon })
-      .addTo(map)
+    // ── 3. Stadium marker ────────────────────────────────────────────────
+    const mkStadium = L.divIcon({ className:'',
+      html:`<div style="background:#ef4444;width:20px;height:20px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.6)"></div>`,
+      iconSize:[20,20], iconAnchor:[10,10] });
+    L.marker([lat,lng], {icon:mkStadium}).addTo(map)
       .bindPopup(`<strong>${venue.name}</strong><div class="pop-type">🏟 Stadium</div>`);
 
-    // 4 ── Admin 141 Picks (gold) — from food_items in admin_scoresheet
-    const foodItems = venue.admin_scoresheet?.food_items || [];
-    let pickCount = 0;
-    const goldIcon = L.divIcon({
-      className: '',
-      html: `<div style="background:#f59e0b;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:8px">⭐</div>`,
-      iconSize: [16, 16], iconAnchor: [8, 8],
+    // ── 4. Admin 141 Map Picks (gold) — stored lat/lng, no geocoding ─────
+    const mapPlaces = venue.admin_scoresheet?.map_places || [];
+    const mkGold = L.divIcon({ className:'',
+      html:`<div style="background:#f59e0b;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.5);font-size:9px;display:flex;align-items:center;justify-content:center">⭐</div>`,
+      iconSize:[18,18], iconAnchor:[9,9] });
+    mapPlaces.forEach(p => {
+      if (!p.lat || !p.lng) return;
+      L.marker([parseFloat(p.lat), parseFloat(p.lng)], {icon:mkGold}).addTo(map)
+        .bindPopup(`<strong>${p.name}</strong><div class="pop-type">⭐ 141 Pick${p.type ? ' · '+p.type : ''}${p.note ? '<br>'+p.note : ''}</div>`);
     });
 
-    // Geocode each named food pick and place on map
-    for (const item of foodItems.slice(0, 6)) {
-      if (!item.name) continue;
-      try {
-        const pickQuery = `${item.name} near ${venue.name} ${venue.city || ''} ${venue.state || ''}`;
-        const pResp = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pickQuery)}&format=json&limit=1`,
-          { headers: { 'Accept-Language': 'en', 'User-Agent': '141vennU/1.0' } }
-        );
-        const pData = await pResp.json();
-        if (pData?.length) {
-          const pLat = parseFloat(pData[0].lat);
-          const pLng = parseFloat(pData[0].lon);
-          // Only place if within ~3 km of stadium
-          const dist = Math.hypot(pLat - lat, pLng - lng);
-          if (dist < 0.05) {
-            L.marker([pLat, pLng], { icon: goldIcon })
-              .addTo(map)
-              .bindPopup(`<strong>${item.name}</strong><div class="pop-type">⭐ 141 Pick${item.price ? ' · ' + item.price : ''}</div>`);
-            pickCount++;
-          }
-        }
-        await new Promise(r => setTimeout(r, 300)); // Nominatim rate limit: 1 req/s
-      } catch(e) { /* skip this pick if geocoding fails */ }
-    }
-
-    // 5 ── Nearby food via Overpass API (restaurants, bars, cafes within 800m)
-    const overpassQuery = `[out:json][timeout:15];
-      (
-        node["amenity"~"^(restaurant|bar|pub|cafe|fast_food|food_court|biergarten)$"](around:800,${lat},${lng});
-        way["amenity"~"^(restaurant|bar|pub|cafe|fast_food|food_court)$"](around:800,${lat},${lng});
-      );
-      out center 30;`;
-    const ovResp = await fetch(
-      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`
-    );
-    const ovData = await ovResp.json();
-    const elements = ovData?.elements || [];
-
-    const blueIcon = L.divIcon({
-      className: '',
-      html: `<div style="background:#3b82f6;width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.8);box-shadow:0 1px 5px rgba(0,0,0,.4)"></div>`,
-      iconSize: [12, 12], iconAnchor: [6, 6],
-    });
-    const amenityLabel = { restaurant:'Restaurant', bar:'Bar', pub:'Pub', cafe:'Café', fast_food:'Fast Food', food_court:'Food Court', biergarten:'Beer Garden' };
-
-    elements.forEach(el => {
-      const eLat = el.lat ?? el.center?.lat;
-      const eLng = el.lon ?? el.center?.lon;
-      const name = el.tags?.name;
-      if (!eLat || !eLng || !name) return;
-      const type = amenityLabel[el.tags?.amenity] || 'Food & Drink';
-      const cuisine = el.tags?.cuisine ? ` · ${el.tags.cuisine.replace(/_/g,' ')}` : '';
-      L.marker([eLat, eLng], { icon: blueIcon })
-        .addTo(map)
-        .bindPopup(`<strong>${name}</strong><div class="pop-type">${type}${cuisine}</div>`);
-    });
-
-    // 6 ── Update header count
+    // Update pick count in header
     const countEl = document.getElementById('venue-map-pick-count');
-    if (countEl) {
-      const total = elements.filter(e => e.tags?.name).length;
-      countEl.textContent = total ? `${total} spots found` : '';
+    if (countEl && mapPlaces.length) countEl.textContent = `${mapPlaces.length} 141 pick${mapPlaces.length>1?'s':''}`;
+
+    // ── 5. Nearby food from Overpass (non-blocking, best-effort) ─────────
+    try {
+      const ovQ = `[out:json][timeout:10];(node["amenity"~"^(restaurant|bar|pub|cafe|fast_food|food_court)$"](around:800,${lat},${lng});way["amenity"~"^(restaurant|bar|pub|cafe|fast_food)$"](around:800,${lat},${lng}););out center 40;`;
+      const ovR = await _fetchWithTimeout(
+        `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ovQ)}`,
+        {}, 12000
+      );
+      const ovD = await ovR.json();
+      const els = ovD?.elements || [];
+      const mkBlue = L.divIcon({ className:'',
+        html:`<div style="background:#3b82f6;width:11px;height:11px;border-radius:50%;border:2px solid rgba(255,255,255,.8);box-shadow:0 1px 5px rgba(0,0,0,.5)"></div>`,
+        iconSize:[11,11], iconAnchor:[5,5] });
+      const aLabel = {restaurant:'Restaurant',bar:'Bar',pub:'Pub',cafe:'Café',fast_food:'Fast Food',food_court:'Food Court'};
+      let nearby = 0;
+      els.forEach(el => {
+        const eLat = el.lat ?? el.center?.lat;
+        const eLng = el.lon  ?? el.center?.lon;
+        const name = el.tags?.name;
+        if (!eLat || !eLng || !name) return;
+        const type = aLabel[el.tags?.amenity] || 'Food & Drink';
+        const cuisine = el.tags?.cuisine ? ` · ${el.tags.cuisine.replace(/_/g,' ')}` : '';
+        L.marker([eLat,eLng],{icon:mkBlue}).addTo(map)
+          .bindPopup(`<strong>${name}</strong><div class="pop-type">${type}${cuisine}</div>`);
+        nearby++;
+      });
+      if (countEl) {
+        const picks = mapPlaces.length;
+        const parts = [];
+        if (picks) parts.push(`${picks} 141 pick${picks>1?'s':''}`);
+        if (nearby) parts.push(`${nearby} nearby`);
+        countEl.textContent = parts.join(' · ');
+      }
+    } catch(e) {
+      // Overpass failed — map still works, just no auto-nearby markers
+      console.warn('Overpass unavailable:', e.message);
     }
 
   } catch(e) {
     console.error('initVenueMap error:', e);
-    if (mapEl) mapEl.innerHTML = '<div class="map-loading">⚠️ Map unavailable — check connection</div>';
+    if (mapEl) mapEl.innerHTML = '<div class="map-loading">⚠️ Map failed to load — check your connection</div>';
   }
+}
+
+// ── MAP PLACES (admin) ──
+function addMapPlaceRow(place = {}) {
+  const list = document.getElementById('adv-map-places-list');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.className = 'map-place-row';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 110px 80px 80px auto;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px';
+  row.innerHTML = `
+    <input type="text" placeholder="Place name (e.g. McConnell's Ice Cream)" value="${place.name||''}"
+      style="background:none;border:none;outline:none;color:var(--ink);font-size:13px;font-family:'Barlow',sans-serif" data-field="name">
+    <select data-field="type" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;color:var(--ink);font-size:12px;padding:4px 6px">
+      <option value="restaurant" ${place.type==='restaurant'?'selected':''}>Restaurant</option>
+      <option value="bar"        ${place.type==='bar'?'selected':''}>Bar</option>
+      <option value="cafe"       ${place.type==='cafe'?'selected':''}>Café</option>
+      <option value="fast_food"  ${place.type==='fast_food'?'selected':''}>Fast Food</option>
+      <option value="other"      ${place.type==='other'?'selected':''}>Other</option>
+    </select>
+    <input type="number" placeholder="Lat" step="any" value="${place.lat||''}"
+      style="background:none;border:1px solid var(--border);border-radius:5px;padding:4px 6px;color:var(--ink);font-size:12px;width:100%;box-sizing:border-box" data-field="lat">
+    <input type="number" placeholder="Lng" step="any" value="${place.lng||''}"
+      style="background:none;border:1px solid var(--border);border-radius:5px;padding:4px 6px;color:var(--ink);font-size:12px;width:100%;box-sizing:border-box" data-field="lng">
+    <button onclick="this.closest('.map-place-row').remove()" style="background:none;border:none;color:var(--dislike);cursor:pointer;font-size:16px;padding:0 4px" title="Remove">✕</button>`;
+  list.appendChild(row);
+}
+
+function getMapPlaces() {
+  return [...(document.getElementById('adv-map-places-list')?.querySelectorAll('.map-place-row') || [])]
+    .map(row => ({
+      name: row.querySelector('[data-field="name"]')?.value.trim() || '',
+      type: row.querySelector('[data-field="type"]')?.value || 'restaurant',
+      lat:  parseFloat(row.querySelector('[data-field="lat"]')?.value) || null,
+      lng:  parseFloat(row.querySelector('[data-field="lng"]')?.value) || null,
+    }))
+    .filter(p => p.name); // skip rows with no name
+}
+
+function loadMapPlaceRows(places = []) {
+  const list = document.getElementById('adv-map-places-list');
+  if (!list) return;
+  list.innerHTML = '';
+  places.forEach(p => addMapPlaceRow(p));
 }
 
 // ── TAG SYSTEM ──
