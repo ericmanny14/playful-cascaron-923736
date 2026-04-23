@@ -767,7 +767,7 @@ nav ul a:hover{color:var(--ink)}
       <a href="#" onclick="navToVenueBrowse();return false">Browse Venues</a>
       <a href="#" onclick="handleReviewClick();return false">Submit a Review</a>
       <a href="/privacy">Privacy Policy</a>
-      <a href="mailto:hello@141vennu.com">Contact</a>
+      <a href="mailto:eric141vennu@gmail.com">Contact</a>
     </div>
     <div class="footer-text">141 venn-U · Stadium &amp; Venue Reviews · Rate Every Seat, Every Bite, Every Venue</div></div></div>
 </div>
@@ -2587,30 +2587,62 @@ async function loadStats() {
 // TOP VENUES LEADERBOARD
 // ═══════════════════════════════════
 async function loadTopVenues() {
+  const el = document.getElementById('top-venues-list');
   try {
-    const data = await _sbGet('reviews?select=venue_id,venue_name,total_score&limit=500');
-    if (!data?.length) return;
+    // Fetch venues (includes admin scoresheet) and community reviews in parallel
+    const [venues, reviews] = await Promise.all([
+      _sbGet('venues?select=id,name,admin_scoresheet&order=name'),
+      _sbGet('reviews?select=venue_id,venue_name,total_score&limit=500')
+    ]);
+
     const map = {};
-    data.forEach(r => {
+    // Seed with venues that have admin scoresheets
+    (venues || []).forEach(v => {
+      const adminScore = v.admin_scoresheet?.total_score != null
+        ? parseFloat(v.admin_scoresheet.total_score) : null;
+      map[v.id] = { name: v.name, scores: [], adminScore: (adminScore != null && !isNaN(adminScore)) ? adminScore : null };
+    });
+    // Add community review scores
+    (reviews || []).forEach(r => {
       const score = parseFloat(r.total_score);
-      if (isNaN(score)) return; // skip reviews with no score
-      if (!map[r.venue_id]) map[r.venue_id] = { name: r.venue_name, scores: [] };
+      if (isNaN(score)) return;
+      if (!map[r.venue_id]) map[r.venue_id] = { name: r.venue_name, scores: [], adminScore: null };
       map[r.venue_id].scores.push(score);
     });
+
     const ranked = Object.entries(map)
-      .filter(([,v]) => v.scores.length > 0)
-      .map(([id,v]) => ({ id, name: v.name, avg: v.scores.reduce((a,b)=>a+b,0)/v.scores.length }))
-      .sort((a,b) => b.avg - a.avg).slice(0,5);
-    const el = document.getElementById('top-venues-list');
+      .map(([id, v]) => {
+        const communityAvg = v.scores.length ? v.scores.reduce((a,b)=>a+b,0) / v.scores.length : null;
+        let avg;
+        if (v.adminScore != null && communityAvg != null) {
+          avg = (communityAvg * v.scores.length + v.adminScore) / (v.scores.length + 1);
+        } else if (v.adminScore != null) {
+          avg = v.adminScore;
+        } else {
+          avg = communityAvg;
+        }
+        return { id, name: v.name, avg };
+      })
+      .filter(v => v.avg != null && !isNaN(v.avg))
+      .sort((a,b) => b.avg - a.avg)
+      .slice(0, 5);
+
     if (!el) return;
+    if (!ranked.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No ranked venues yet</div>';
+      return;
+    }
     el.innerHTML = ranked.map((v,i) =>
-      `<div class="lb-item" onclick="loadVenueDetail('${v.id}','${v.name.replace(/'/g,"\\'")}')">
+      `<div class="lb-item" onclick="loadVenueDetail('${v.id}','${(v.name||'').replace(/'/g,"\\'")}')">
         <div class="lb-rank">#${i+1}</div>
-        <div class="lb-info"><div class="lb-name">${v.name}</div></div>
+        <div class="lb-info"><div class="lb-name">${v.name || 'Unnamed'}</div></div>
         <div class="lb-sc">${v.avg.toFixed(2)}</div>
       </div>`
     ).join('');
-  } catch(e) { console.error('loadTopVenues error:', e); }
+  } catch(e) {
+    console.error('loadTopVenues error:', e);
+    if (el) el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">Couldn\'t load rankings</div>';
+  }
 }
 
 // ═══════════════════════════════════
