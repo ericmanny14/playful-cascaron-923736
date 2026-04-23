@@ -1287,9 +1287,66 @@ nav ul a:hover{color:var(--ink)}
 // SUPABASE INIT
 // ═══════════════════════════════════
 const { createClient } = supabase;
+
 const sb = createClient('https://jugdgtyhxpqfoowijtbt.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1Z2RndHloeHBxZm9vd2lqdGJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MzA4MTksImV4cCI6MjA4OTEwNjgxOX0.m0aI2THlLSLXsoGQPMCmU1BnFiVnhhrbCi7qCefyVvY', {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'vennu-auth' }
 });
+
+// ═══════════════════════════════════
+// NATIVE SUPABASE REST HELPERS
+// The SDK's auth-refresh loop hangs on this connection for both reads and writes.
+// All critical data paths use these helpers instead.
+// ═══════════════════════════════════
+const _SB_URL = 'https://jugdgtyhxpqfoowijtbt.supabase.co';
+const _SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1Z2RndHloeHBxZm9vd2lqdGJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MzA4MTksImV4cCI6MjA4OTEwNjgxOX0.m0aI2THlLSLXsoGQPMCmU1BnFiVnhhrbCi7qCefyVvY';
+
+function _sbTok() {
+  try { const r = localStorage.getItem('vennu-auth'); return r ? JSON.parse(r)?.access_token : null; } catch(e) { return null; }
+}
+function _sbHdrs(extra = {}) {
+  return { 'apikey': _SB_KEY, 'Authorization': `Bearer ${_sbTok() || _SB_KEY}`, 'Accept': 'application/json', ...extra };
+}
+
+// GET — returns parsed JSON array/object, or null on error
+async function _sbGet(path, timeoutMs = 10000) {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${_SB_URL}/rest/v1/${path}`, { headers: _sbHdrs(), signal: ctrl.signal });
+    clearTimeout(tid);
+    if (!r.ok) { console.warn('[_sbGet]', path, r.status); return null; }
+    return await r.json();
+  } catch(e) { clearTimeout(tid); console.warn('[_sbGet]', path, e.message); return null; }
+}
+
+// COUNT — returns integer count via Content-Range header
+async function _sbCount(table, filter = '') {
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch(`${_SB_URL}/rest/v1/${table}?select=*${filter ? '&' + filter : ''}&limit=0`, {
+      method: 'HEAD', headers: { ..._sbHdrs(), 'Prefer': 'count=exact' }, signal: ctrl.signal
+    });
+    return parseInt(r.headers.get('Content-Range')?.split('/')[1] || '0', 10);
+  } catch(e) { return 0; }
+}
+
+// PATCH/POST — returns { data, error }
+async function _sbMutate(method, path, body, timeoutMs = 15000) {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${_SB_URL}/rest/v1/${path}`, {
+      method, signal: ctrl.signal,
+      headers: _sbHdrs({ 'Content-Type': 'application/json', 'Prefer': 'return=representation' }),
+      body: JSON.stringify(body)
+    });
+    clearTimeout(tid);
+    const json = await r.json().catch(() => null);
+    if (!r.ok) return { data: null, error: json };
+    return { data: json, error: null };
+  } catch(e) { clearTimeout(tid); return { data: null, error: { message: e.message } }; }
+}
 
 let currentUser = null;
 let currentProfile = null;
@@ -1852,25 +1909,14 @@ async function loadVenueDetail(venueId, venueName) {
 
     setEl('venue-detail-name', venueName || 'Loading...');
 
-    // Run venue + reviews queries in parallel — abort after 12 s so a bad connection never freezes
-    const vdCtrl = new AbortController();
-    const vdTimeout = setTimeout(() => vdCtrl.abort(), 12000);
-    const [
-      { data: venue, error: venueError },
-      { data: reviews, error: reviewsError }
-    ] = await Promise.all([
-      sb.from('venues').select('*').eq('id', venueId).single().abortSignal(vdCtrl.signal),
-      sb.from('reviews')
-        .select('*, profiles(display_name, username, scout_level)')
-        .eq('venue_id', venueId)
-        .eq('is_hidden', false)
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: false })
-        .abortSignal(vdCtrl.signal)
+    // Run venue + reviews queries in parallel via native fetch (SDK hangs on this connection)
+    const [venueRows, reviews] = await Promise.all([
+      _sbGet(`venues?id=eq.${encodeURIComponent(venueId)}&select=*&limit=1`),
+      _sbGet(`reviews?venue_id=eq.${encodeURIComponent(venueId)}&is_hidden=eq.false&order=is_pinned.desc,created_at.desc&select=*,profiles(display_name,username,scout_level)`)
     ]);
-    clearTimeout(vdTimeout);
+    const venue = Array.isArray(venueRows) ? venueRows[0] : null;
 
-    if (venueError || !venue) {
+    if (!venue) {
       showToast('Venue not found', 'error');
       showPage('home');
       return;
@@ -1898,10 +1944,8 @@ async function loadVenueDetail(venueId, venueName) {
     setEl('vd-city', [venue.city, venue.state].filter(Boolean).join(', ') || '–');
     setEl('vd-cap', venue.capacity?.toLocaleString() || '–');
 
-    if (reviewsError) {
-      showToast('Error loading reviews: ' + reviewsError.message, 'error');
-      return;
-    }
+    // reviews will be null if the fetch failed — treat as empty rather than crashing
+    const safeReviews = Array.isArray(reviews) ? reviews : [];
 
     const adminScore = venue.admin_scoresheet?.total_score != null
       ? parseFloat(venue.admin_scoresheet.total_score)
@@ -1914,7 +1958,7 @@ async function loadVenueDetail(venueId, venueName) {
       else { pdfCard.style.display = 'none'; }
     }
 
-    if (!reviews?.length) {
+    if (!safeReviews.length) {
       if (adminScore != null) {
         setEl('venue-big-score', adminScore.toFixed(2));
         setEl('venue-review-count', '141 Score · Official Review');
@@ -1931,25 +1975,25 @@ async function loadVenueDetail(venueId, venueName) {
 
     // Safe number parse — treats null/undefined/NaN as 0
     const safeNum = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
-    const avg = field => reviews.reduce((s, r) => s + safeNum(r[field]), 0) / reviews.length;
-    const communityAvg = reviews.reduce((s, r) => s + safeNum(r.total_score), 0) / reviews.length;
+    const avg = field => safeReviews.reduce((s, r) => s + safeNum(r[field]), 0) / safeReviews.length;
+    const communityAvg = safeReviews.reduce((s, r) => s + safeNum(r.total_score), 0) / safeReviews.length;
 
     let displayScore, reviewLabel;
     if (adminScore != null) {
-      const combined = (communityAvg * reviews.length + adminScore) / (reviews.length + 1);
+      const combined = (communityAvg * safeReviews.length + adminScore) / (safeReviews.length + 1);
       displayScore = combined.toFixed(2);
-      reviewLabel = `141 Score · ${reviews.length} Community + Official`;
+      reviewLabel = `141 Score · ${safeReviews.length} Community + Official`;
     } else {
       displayScore = communityAvg.toFixed(2);
-      reviewLabel = `141 Score · ${reviews.length} Reviews`;
+      reviewLabel = `141 Score · ${safeReviews.length} Reviews`;
     }
 
     setEl('venue-big-score', displayScore);
     setEl('venue-review-count', reviewLabel);
-    setEl('vd-revcount', reviews.length);
+    setEl('vd-revcount', safeReviews.length);
 
     const fields = [['pre','score_pregame'],['atm','score_atmosphere'],['com','score_comfort'],['amn','score_amenities'],['sec','score_security'],['post','score_postgame']];
-    const revCount = `${reviews.length} ${reviews.length === 1 ? 'review' : 'reviews'}`;
+    const revCount = `${safeReviews.length} ${safeReviews.length === 1 ? 'review' : 'reviews'}`;
     fields.forEach(([id, field]) => {
       const a = avg(field);
       const emojiEl = document.getElementById(`vb-${id}-emoji`);
@@ -1959,7 +2003,7 @@ async function loadVenueDetail(venueId, venueName) {
     });
 
     const listEl = document.getElementById('venue-reviews-list');
-    if (listEl) listEl.innerHTML = reviews.map((r, i) => buildReviewCard(r, i)).join('');
+    if (listEl) listEl.innerHTML = safeReviews.map((r, i) => buildReviewCard(r, i)).join('');
 
     loadAdminSpotlight(venueId);
     // Map: auto-load when admin has pinned places OR venue has enough location data.
@@ -2989,18 +3033,15 @@ function switchAdminTab(tab, btn) {
 
 async function admLoadOverview() {
   try {
-  const [{ count: vc }, { count: rc }, { count: uc }] = await Promise.all([
-    sb.from('venues').select('*', { count: 'exact', head: true }),
-    sb.from('reviews').select('*', { count: 'exact', head: true }),
-    sb.from('profiles').select('*', { count: 'exact', head: true }),
+  const [vc, rc, uc, recent] = await Promise.all([
+    _sbCount('venues'),
+    _sbCount('reviews'),
+    _sbCount('profiles'),
+    _sbGet('reviews?order=created_at.desc&limit=5&select=*,profiles(display_name)')
   ]);
   const sv = document.getElementById('adm-stat-venues'); if (sv) sv.textContent = vc || 0;
   const sr = document.getElementById('adm-stat-reviews'); if (sr) sr.textContent = rc || 0;
   const su = document.getElementById('adm-stat-users'); if (su) su.textContent = uc || 0;
-  // Recent reviews
-  const { data: recent } = await sb.from('reviews')
-    .select('*, profiles(display_name)')
-    .order('created_at', { ascending: false }).limit(5);
   const recentEl = document.getElementById('adm-recent-reviews');
   if (recentEl) recentEl.innerHTML = recent?.map(r => {
     const sc = parseFloat(r.total_score);
@@ -3018,9 +3059,8 @@ async function admLoadOverview() {
 
 async function admLoadVenueList(q) {
   try {
-  let query = sb.from('venues').select('id,name,city,state,sport,team,is_featured').order('name');
-  if (q) query = query.ilike('name', `%${q}%`);
-  const { data } = await query.limit(50);
+  const filter = q ? `name=ilike.*${encodeURIComponent(q)}*&` : '';
+  const data = await _sbGet(`venues?${filter}select=id,name,city,state,sport,team,is_featured&order=name&limit=50`);
   const el = document.getElementById('adm-venue-list');
   if (!el) return;
   el.innerHTML = data?.map(v =>
@@ -3277,15 +3317,19 @@ async function saveAdminVenue() {
     let { data: saved, error } = await runDbCall(payload);
     console.log('[saveAdminVenue] response — data:', saved, 'error:', error);
 
-    // 42703 = column doesn't exist yet — remove just that column and retry
-    if (error?.code === '42703' || error?.message?.includes('column')) {
+    // 42703 = column doesn't exist — loop removing bad columns until save succeeds
+    // (address, lat, lng may not exist if ALTER TABLE hasn't been run yet)
+    const strippedPayload = { ...payload };
+    let retryCount = 0;
+    while ((error?.code === '42703' || (error?.message || '').includes('column')) && retryCount < 8) {
       const badCol = (error.message || '').match(/column "?(\w+)"?/)?.[1];
-      console.warn('[saveAdminVenue] missing column:', badCol, '— retrying without it');
-      const retryPayload = { ...payload };
-      if (badCol) delete retryPayload[badCol];
-      ({ data: saved, error } = await runDbCall(retryPayload));
-      console.log('[saveAdminVenue] retry — data:', saved, 'error:', error);
+      if (!badCol || !(badCol in strippedPayload)) break;
+      console.warn('[saveAdminVenue] missing column:', badCol, '— removing and retrying');
+      delete strippedPayload[badCol];
+      ({ data: saved, error } = await runDbCall(strippedPayload));
+      retryCount++;
     }
+    if (retryCount > 0) console.log('[saveAdminVenue] after', retryCount, 'retries — data:', saved, 'error:', error);
 
     if (timedOut) return;
 
@@ -3336,10 +3380,10 @@ async function admLoadReviews(filter, btn) {
     });
     btn.style.background='rgba(30,127,212,.1)'; btn.style.borderColor='var(--blue)'; btn.style.color='var(--blue-light)';
   }
-  let query = sb.from('reviews').select('*, profiles(display_name)').order('created_at', { ascending: false }).limit(50);
-  if (filter === 'hidden') query = query.eq('is_hidden', true);
-  if (filter === 'pinned') query = query.eq('is_pinned', true);
-  const { data } = await query;
+  let qs = 'reviews?select=*,profiles(display_name)&order=created_at.desc&limit=50';
+  if (filter === 'hidden') qs += '&is_hidden=eq.true';
+  if (filter === 'pinned') qs += '&is_pinned=eq.true';
+  const data = await _sbGet(qs);
   const el = document.getElementById('adm-reviews-list');
   if (!el) return;
   if (!data?.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px">No reviews found</div>'; return; }
@@ -3369,8 +3413,8 @@ async function admLoadReviews(filter, btn) {
 
 async function admTogglePin(id, pin, btn) {
   try {
-    const { error } = await sb.from('reviews').update({ is_pinned: pin }).eq('id', id);
-    if (error) { showToast('Error: ' + error.message, 'error'); return; }
+    const { error } = await _sbMutate('PATCH', `reviews?id=eq.${encodeURIComponent(id)}`, { is_pinned: pin });
+    if (error) { showToast('Error: ' + (error.message || JSON.stringify(error)), 'error'); return; }
     showToast(pin ? '📌 Review pinned!' : 'Review unpinned');
     if (btn) btn.textContent = pin ? '📌 Unpin' : '📌 Pin to Top';
     admLoadReviews('all').catch(e => {});
@@ -3379,8 +3423,8 @@ async function admTogglePin(id, pin, btn) {
 
 async function admToggleHide(id, hide, btn) {
   try {
-    const { error } = await sb.from('reviews').update({ is_hidden: hide }).eq('id', id);
-    if (error) { showToast('Error: ' + error.message, 'error'); return; }
+    const { error } = await _sbMutate('PATCH', `reviews?id=eq.${encodeURIComponent(id)}`, { is_hidden: hide });
+    if (error) { showToast('Error: ' + (error.message || JSON.stringify(error)), 'error'); return; }
     showToast(hide ? '🙈 Review hidden from feed' : '👁 Review visible again');
     admLoadReviews('all').catch(e => {});
   } catch(e) { showToast('Error hiding review: ' + e.message, 'error'); }
@@ -3428,7 +3472,7 @@ async function admDeleteReview(id, btn) {
 // ── ADMIN USERS ──
 async function admLoadUsers() {
   try {
-  const { data } = await sb.from('profiles').select('*').order('created_at', { ascending: false }).limit(50);
+  const data = await _sbGet('profiles?select=*&order=created_at.desc&limit=50');
   const el = document.getElementById('adm-users-list');
   if (!el) return;
   el.innerHTML = data?.map(u =>
