@@ -3492,18 +3492,125 @@ async function initVenueMap(venue) {
 
   try {
     // ── 1. Resolve coordinates ───────────────────────────────────────────
-    // Priority: stored lat/lng (admin-entered) → Nominatim geocoding fallback.
-    // Stored coords are instant and 100% reliable; Nominatim is best-effort.
+    // Priority: stored lat/lng (admin-entered) → built-in stadium table → no map.
     let lat = null, lng = null;
+
+    // Built-in coordinate table for well-known NFL/MLB/NBA/NHL stadiums.
+    // Keyed by lowercased venue name — add more as needed.
+    const _KNOWN_COORDS = {
+      // NFL
+      'sofi stadium':                          [33.9535,  -118.3392],
+      "levi's stadium":                        [37.4032,  -121.9698],
+      'levis stadium':                         [37.4032,  -121.9698],
+      'gillette stadium':                      [42.0909,   -71.2643],
+      'metlife stadium':                       [40.8135,   -74.0745],
+      'lambeau field':                         [44.5013,   -88.0622],
+      'arrowhead stadium':                     [39.0489,   -94.4839],
+      'soldier field':                         [41.8623,   -87.6167],
+      'us bank stadium':                       [44.9736,   -93.2575],
+      'bank of america stadium':               [35.2258,   -80.8528],
+      'paycor stadium':                        [39.0955,   -84.5161],
+      'm&t bank stadium':                      [39.2780,   -76.6227],
+      'nrg stadium':                           [29.6847,   -95.4107],
+      'lucas oil stadium':                     [39.7601,   -86.1639],
+      'state farm stadium':                    [33.5276,  -112.2626],
+      'allegiant stadium':                     [36.0909,  -115.1833],
+      'lumen field':                           [47.5952,  -122.3316],
+      'raymond james stadium':                 [27.9759,   -82.5033],
+      'empower field at mile high':            [39.7439,  -105.0201],
+      'empower field':                         [39.7439,  -105.0201],
+      'mile high stadium':                     [39.7439,  -105.0201],
+      'acrisure stadium':                      [40.4468,   -80.0158],
+      'nissan stadium':                        [36.1665,   -86.7713],
+      'firstenergy stadium':                   [41.5061,   -81.6995],
+      'ford field':                            [42.3400,   -83.0456],
+      'at&t stadium':                          [32.7473,   -97.0945],
+      'hard rock stadium':                     [25.9580,   -80.2389],
+      'lincoln financial field':               [39.9008,   -75.1675],
+      'fedexfield':                            [38.9076,   -76.8645],
+      'highmark stadium':                      [42.7738,   -78.7870],
+      'era stadium':                           [42.7738,   -78.7870],
+      'caesars superdome':                     [29.9511,   -90.0812],
+      'mountain america stadium':              [33.4255,  -111.9325],
+      // MLB
+      'dodger stadium':                        [34.0739,  -118.2400],
+      'oracle park':                           [37.7786,  -122.3893],
+      'fenway park':                           [42.3467,   -71.0972],
+      'wrigley field':                         [41.9484,   -87.6553],
+      'yankee stadium':                        [40.8296,   -73.9262],
+      'citi field':                            [40.7571,   -73.8458],
+      'camden yards':                          [39.2838,   -76.6217],
+      'oriole park at camden yards':           [39.2838,   -76.6217],
+      'globe life field':                      [32.7473,   -97.0822],
+      'truist park':                           [33.8908,   -84.4678],
+      'great american ball park':              [39.0979,   -84.5082],
+      'pnc park':                              [40.4469,   -80.0057],
+      'busch stadium':                         [38.6226,   -90.1928],
+      'american family field':                 [43.0280,   -87.9712],
+      'target field':                          [44.9817,   -93.2781],
+      'guaranteed rate field':                 [41.8300,   -87.6338],
+      'progressive field':                     [41.4962,   -81.6852],
+      'comerica park':                         [42.3390,   -83.0485],
+      'kauffman stadium':                      [39.0517,   -94.4803],
+      'minute maid park':                      [29.7573,   -95.3555],
+      'angel stadium':                         [33.8003,  -117.8827],
+      'petco park':                            [32.7076,  -117.1570],
+      'chase field':                           [33.4455,  -112.0667],
+      'coors field':                           [39.7559,   -104.9942],
+      't-mobile park':                         [47.5914,  -122.3325],
+      'tropicana field':                       [27.7683,   -82.6534],
+      'pnc arena':                             [35.8034,   -78.7220],
+      'rogers centre':                         [43.6414,   -79.3894],
+      'nationals park':                        [38.8730,   -77.0074],
+      'loandepot park':                        [25.7781,   -80.2197],
+      // NBA / NHL arenas
+      'crypto.com arena':                      [34.0430,  -118.2673],
+      'madison square garden':                 [40.7505,   -73.9934],
+      'united center':                         [41.8806,   -87.6742],
+      'chase center':                          [37.7680,  -122.3877],
+      'td garden':                             [42.3662,   -71.0621],
+      'barclays center':                       [40.6826,   -73.9754],
+      'american airlines center':              [32.7905,   -96.8103],
+      'ball arena':                            [39.7487,  -105.0077],
+      'toyota center':                         [29.7508,   -95.3621],
+      'fiserv forum':                          [43.0450,   -87.9170],
+      'scotiabank arena':                      [43.6435,   -79.3791],
+      'little caesars arena':                  [42.3411,   -83.0554],
+      'golden 1 center':                       [38.5802,  -121.4997],
+      'spectrum center':                       [35.2251,   -80.8392],
+      'state farm arena':                      [33.7573,   -84.3963],
+      'capital one arena':                     [38.8981,   -77.0209],
+      'kaseya center':                         [25.7814,   -80.1870],
+      'smoothie king center':                  [29.9490,   -90.0821],
+      'fedexforum':                            [35.1382,   -90.0505],
+      'moda center':                           [45.5316,  -122.6668],
+      'vivint arena':                          [40.7683,  -111.9011],
+      'footprint center':                      [33.4457,  -112.0712],
+      'paycom center':                         [35.4634,   -97.5151],
+      'amway center':                          [28.5392,   -81.3839],
+      'wells fargo center':                    [39.9012,   -75.1720],
+      'rocket mortgage fieldhouse':            [41.4965,   -81.6882],
+      'gainbridge fieldhouse':                 [39.7638,   -86.1555],
+      'enterprise center':                     [38.6271,   -90.2028],
+      'ppl center':                            [40.6021,   -75.4705],
+      'xcel energy center':                    [44.9447,   -93.1013],
+      'ppg paints arena':                      [40.4395,   -79.9892],
+    };
 
     if (venue.lat && venue.lng && !isNaN(parseFloat(venue.lat)) && !isNaN(parseFloat(venue.lng))) {
       lat = parseFloat(venue.lat);
       lng = parseFloat(venue.lng);
       console.log('[initVenueMap] using stored coords:', lat, lng);
     } else {
-      // No stored coordinates — skip external geocoding (unreliable from browsers).
-      // Admin must enter lat/lng via the venue editor.
-      console.warn('[initVenueMap] no stored lat/lng for venue:', venue.id, venue.name);
+      // Try the built-in table by normalized venue name
+      const normName = (venue.name || '').toLowerCase().trim();
+      const known = _KNOWN_COORDS[normName];
+      if (known) {
+        lat = known[0]; lng = known[1];
+        console.log('[initVenueMap] using built-in coords for:', venue.name);
+      } else {
+        console.warn('[initVenueMap] no coords for venue:', venue.id, venue.name);
+      }
     }
 
     if (!lat || !lng) {
