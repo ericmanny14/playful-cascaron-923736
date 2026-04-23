@@ -1158,10 +1158,20 @@ nav ul a:hover{color:var(--ink)}
           <div class="admin-field"><label>Transit</label><input type="text" id="adv-transit" placeholder="Monorail · 10 min walk"></div>
         </div>
 
-        <!-- Street address — used by the food map to pin the exact stadium location -->
+        <!-- Street address + coordinates — used by the food map to place the stadium pin -->
         <div class="admin-field">
           <label>📍 Stadium Address <span style="font-weight:400;font-size:11px;color:var(--muted)">(used to place the map pin accurately)</span></label>
           <input type="text" id="adv-address" placeholder="e.g. 1 Seahawks Way, Renton, WA 98056" style="width:100%">
+        </div>
+        <div class="admin-grid" style="grid-template-columns:1fr 1fr">
+          <div class="admin-field">
+            <label>🌐 Latitude <span style="font-weight:400;font-size:11px;color:var(--muted)">(optional — overrides geocoding)</span></label>
+            <input type="number" step="any" id="adv-lat" placeholder="e.g. 33.9535">
+          </div>
+          <div class="admin-field">
+            <label>🌐 Longitude <span style="font-weight:400;font-size:11px;color:var(--muted)">(optional — overrides geocoding)</span></label>
+            <input type="number" step="any" id="adv-lng" placeholder="e.g. -118.3392">
+          </div>
         </div>
 
         <div class="admin-field">
@@ -3036,7 +3046,7 @@ function admShowNewVenueForm() {
   if (venuesTabBtn) switchAdminTab('venues', venuesTabBtn);
   document.getElementById('adm-venue-edit-id').value = '';
   document.getElementById('adm-venue-form-title').textContent = '✏️ Add New Venue';
-  ['adv-name','adv-city','adv-state','adv-sport','adv-team','adv-surface','adv-roof','adv-parking','adv-transit','adv-address','adv-description','adv-video-url','adv-reviewer-name'].forEach(id => {
+  ['adv-name','adv-city','adv-state','adv-sport','adv-team','adv-surface','adv-roof','adv-parking','adv-transit','adv-address','adv-lat','adv-lng','adv-description','adv-video-url','adv-reviewer-name'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = (id === 'adv-reviewer-name') ? '141 venn-U Official' : '';
   });
@@ -3057,10 +3067,21 @@ function admShowNewVenueForm() {
 
 async function admEditVenue(venueId) {
   try {
+  // Bypass SDK (hangs on reads too) — use native fetch directly against Supabase REST API
+  const _EU = 'https://jugdgtyhxpqfoowijtbt.supabase.co';
+  const _EK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1Z2RndHloeHBxZm9vd2lqdGJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MzA4MTksImV4cCI6MjA4OTEwNjgxOX0.m0aI2THlLSLXsoGQPMCmU1BnFiVnhhrbCi7qCefyVvY';
+  let _eTok = null;
+  try { const _r = localStorage.getItem('vennu-auth'); _eTok = _r ? JSON.parse(_r)?.access_token : null; } catch(e) {}
   const editCtrl = new AbortController();
   setTimeout(() => editCtrl.abort(), 10000);
-  const { data: v } = await sb.from('venues').select('*').eq('id', venueId).single().abortSignal(editCtrl.signal);
-  if (!v) return;
+  const _eResp = await fetch(
+    `${_EU}/rest/v1/venues?id=eq.${encodeURIComponent(venueId)}&select=*&limit=1`,
+    { headers: { 'apikey': _EK, 'Authorization': `Bearer ${_eTok || _EK}`, 'Accept': 'application/json' }, signal: editCtrl.signal }
+  );
+  if (!_eResp.ok) throw new Error('Fetch error ' + _eResp.status);
+  const _eRows = await _eResp.json();
+  const v = Array.isArray(_eRows) ? _eRows[0] : null;
+  if (!v) { showToast('Venue not found', 'error'); return; }
   // Switch to Venues tab so the form is visible
   const venuesTabBtn = document.querySelector('.admin-tab[onclick*="venues"]');
   if (venuesTabBtn) switchAdminTab('venues', venuesTabBtn);
@@ -3078,6 +3099,8 @@ async function admEditVenue(venueId) {
   document.getElementById('adv-transit').value = v.transit || '';
   document.getElementById('adv-description').value = v.description || '';
   document.getElementById('adv-address').value = v.address || '';
+  document.getElementById('adv-lat').value = v.lat != null ? v.lat : '';
+  document.getElementById('adv-lng').value = v.lng != null ? v.lng : '';
   // Read review content from admin_scoresheet (JSONB) — that's where saves now write.
   // Fall back to legacy separate columns for existing data that was saved the old way.
   const sc = v.admin_scoresheet;
@@ -3195,6 +3218,8 @@ async function saveAdminVenue() {
       parking:     document.getElementById('adv-parking')?.value.trim()     || null,
       transit:     document.getElementById('adv-transit')?.value.trim()     || null,
       address:     document.getElementById('adv-address')?.value.trim()     || null,
+      lat:         parseFloat(document.getElementById('adv-lat')?.value)    || null,
+      lng:         parseFloat(document.getElementById('adv-lng')?.value)    || null,
       description: document.getElementById('adv-description')?.value.trim() || null,
       is_featured: document.getElementById('adv-featured')?.checked ?? false,
       tags:        tags.length ? tags : null,
@@ -3455,42 +3480,47 @@ async function initVenueMap(venue) {
   card.style.display = 'block';
 
   try {
-    // ── 1. Geocode the stadium via Nominatim ─────────────────────────────
-    // Try multiple query strategies from most-specific to least-specific.
+    // ── 1. Resolve coordinates ───────────────────────────────────────────
+    // Priority: stored lat/lng (admin-entered) → Nominatim geocoding fallback.
+    // Stored coords are instant and 100% reliable; Nominatim is best-effort.
     let lat = null, lng = null;
-    const nameOnly = venue.name || '';
-    const nameCity = [venue.name, venue.city, venue.state].filter(Boolean).join(', ');
-    const cityState = [venue.city, venue.state].filter(Boolean).join(', ');
-    // Build unique, non-empty candidate queries in priority order.
-    const queries = [...new Set([
-      venue.address,   // most accurate: full street address if admin entered one
-      nameCity,        // "SoFi Stadium, Inglewood, CA"
-      nameOnly,        // "SoFi Stadium" — Nominatim knows major stadiums by name alone
-      cityState,       // "Inglewood, CA" — at minimum centres map on the city
-    ])].filter(q => q && q.trim().length > 2);
 
-    console.log('[initVenueMap] geocoding candidates:', queries);
-    for (const q of queries) {
-      if (lat) break;
-      try {
-        const r = await _fetchWithTimeout(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=3&countrycodes=us&addressdetails=0`,
-          {}, 10000
-        );
-        const d = await r.json();
-        // Prefer results tagged as stadium/leisure; fall back to first result.
-        const best = d?.find(x => x.type === 'stadium' || x.class === 'leisure') || d?.[0];
-        if (best) {
-          lat = parseFloat(best.lat); lng = parseFloat(best.lon);
-          console.log('[initVenueMap] geocoded via:', JSON.stringify(q), '→', lat, lng);
-        }
-      } catch(e) { console.warn('[initVenueMap] Nominatim failed for:', q, e.message); }
+    if (venue.lat && venue.lng && !isNaN(parseFloat(venue.lat)) && !isNaN(parseFloat(venue.lng))) {
+      lat = parseFloat(venue.lat);
+      lng = parseFloat(venue.lng);
+      console.log('[initVenueMap] using stored coords:', lat, lng);
+    } else {
+      // Nominatim fallback — try multiple query strategies
+      const nameCity = [venue.name, venue.city, venue.state].filter(Boolean).join(', ');
+      const queries = [...new Set([
+        venue.address,   // full street address (most accurate)
+        nameCity,        // "SoFi Stadium, Inglewood, CA"
+        venue.name,      // name alone — Nominatim knows major stadiums
+        [venue.city, venue.state].filter(Boolean).join(', '), // city fallback
+      ])].filter(q => q && q.trim().length > 2);
+
+      console.log('[initVenueMap] geocoding candidates:', queries);
+      for (const q of queries) {
+        if (lat) break;
+        try {
+          const r = await _fetchWithTimeout(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=3&countrycodes=us&addressdetails=0`,
+            {}, 10000
+          );
+          const d = await r.json();
+          const best = d?.find(x => x.type === 'stadium' || x.class === 'leisure') || d?.[0];
+          if (best && !isNaN(parseFloat(best.lat))) {
+            lat = parseFloat(best.lat); lng = parseFloat(best.lon);
+            console.log('[initVenueMap] geocoded via:', JSON.stringify(q), '→', lat, lng);
+          }
+        } catch(e) { console.warn('[initVenueMap] Nominatim failed for:', q, e.message); }
+      }
     }
 
     if (!lat || !lng) {
       mapEl.innerHTML = `<div class="map-loading" style="flex-direction:column;gap:10px">
         <span>📍 Couldn't locate this venue on the map.</span>
-        <span style="font-size:12px;color:var(--muted)">Admin: add a City, State and/or Address in the venue editor to fix this.</span>
+        <span style="font-size:12px;color:var(--muted)">Admin: open the venue editor and enter Latitude &amp; Longitude to fix this.</span>
       </div>`;
       return;
     }
