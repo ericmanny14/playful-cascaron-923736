@@ -1952,11 +1952,12 @@ async function loadVenueDetail(venueId, venueName) {
     if (listEl) listEl.innerHTML = reviews.map((r, i) => buildReviewCard(r, i)).join('');
 
     loadAdminSpotlight(venueId);
-    // Map: auto-load only when admin has pinned places (guaranteed content worth showing).
-    // Otherwise show card with on-demand button so a slow connection never freezes the page.
+    // Map: auto-load when admin has pinned places OR venue has enough location data.
+    // On-demand button for venues with no location info at all.
     _venueMapData = venue;
     const hasAdminPicks = (venue.admin_scoresheet?.map_places?.length || 0) > 0;
-    if (hasAdminPicks) {
+    const hasLocation = !!(venue.address || venue.city || venue.name);
+    if (hasAdminPicks || hasLocation) {
       initVenueMap(venue).catch(e => console.error('map error:', e));
     } else {
       const card = document.getElementById('venue-map-card');
@@ -2597,11 +2598,24 @@ async function loadProfile() {
   document.getElementById('edit-username').value = profile?.username || '';
   document.getElementById('edit-bio').value = profile?.bio || '';
 
-  // Reviews — fetch ALL reviews by this user (including anonymous ones)
-  const { data: reviews, error: reviewsError } = await sb.from('reviews')
-    .select('*')
-    .eq('user_id', currentUser.id)
-    .order('created_at', { ascending: false });
+  // Reviews — bypass SDK (same SDK-hang issue as saves); join profiles for display name.
+  let reviews = null, reviewsError = null;
+  try {
+    const _SURL = 'https://jugdgtyhxpqfoowijtbt.supabase.co';
+    const _SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1Z2RndHloeHBxZm9vd2lqdGJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MzA4MTksImV4cCI6MjA4OTEwNjgxOX0.m0aI2THlLSLXsoGQPMCmU1BnFiVnhhrbCi7qCefyVvY';
+    let _tok = null;
+    try { const _raw = localStorage.getItem('vennu-auth'); _tok = _raw ? JSON.parse(_raw)?.access_token : null; } catch(e) {}
+    const _hdrs = { 'apikey': _SKEY, 'Authorization': `Bearer ${_tok || _SKEY}`, 'Accept': 'application/json' };
+    const _rc = new AbortController();
+    const _rt = setTimeout(() => _rc.abort(), 10000);
+    const _rr = await fetch(
+      `${_SURL}/rest/v1/reviews?user_id=eq.${encodeURIComponent(currentUser.id)}&order=created_at.desc&select=*,profiles(display_name,username,scout_level)`,
+      { headers: _hdrs, signal: _rc.signal }
+    );
+    clearTimeout(_rt);
+    if (_rr.ok) { reviews = await _rr.json(); }
+    else { reviewsError = await _rr.json().catch(() => ({ message: 'fetch error ' + _rr.status })); }
+  } catch(e) { reviewsError = e; }
   if (reviewsError) console.warn('[loadProfile] reviews error:', reviewsError);
   const reviewCount = reviews?.length || 0;
   document.getElementById('profile-stat-reviews').textContent = reviewCount;
@@ -3441,30 +3455,43 @@ async function initVenueMap(venue) {
   card.style.display = 'block';
 
   try {
-    // ── 1. Geocode the stadium (Nominatim, 8s timeout) ──────────────────
-    // If admin entered a full street address use it first — far more accurate than name+city.
+    // ── 1. Geocode the stadium via Nominatim ─────────────────────────────
+    // Try multiple query strategies from most-specific to least-specific.
     let lat = null, lng = null;
-    const queries = [
-      venue.address,                                                      // "1 Seahawks Way, Renton, WA"
-      [venue.name, venue.city, venue.state].filter(Boolean).join(', '),  // "Lumen Field, Seattle, WA"
-      [venue.city, venue.state].filter(Boolean).join(', '),              // "Seattle, WA"
-    ].filter(Boolean);
+    const nameOnly = venue.name || '';
+    const nameCity = [venue.name, venue.city, venue.state].filter(Boolean).join(', ');
+    const cityState = [venue.city, venue.state].filter(Boolean).join(', ');
+    // Build unique, non-empty candidate queries in priority order.
+    const queries = [...new Set([
+      venue.address,   // most accurate: full street address if admin entered one
+      nameCity,        // "SoFi Stadium, Inglewood, CA"
+      nameOnly,        // "SoFi Stadium" — Nominatim knows major stadiums by name alone
+      cityState,       // "Inglewood, CA" — at minimum centres map on the city
+    ])].filter(q => q && q.trim().length > 2);
+
+    console.log('[initVenueMap] geocoding candidates:', queries);
     for (const q of queries) {
       if (lat) break;
       try {
         const r = await _fetchWithTimeout(
-          // countrycodes=us narrows search to USA for faster, more accurate results.
-          // User-Agent is required by Nominatim usage policy.
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=us`,
-          { headers: { 'User-Agent': '141venn-U/1.0 (https://141vennu.com)' } }, 10000
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=3&countrycodes=us&addressdetails=0`,
+          {}, 10000
         );
         const d = await r.json();
-        if (d?.length) { lat = parseFloat(d[0].lat); lng = parseFloat(d[0].lon); }
-      } catch(e) { console.warn('Nominatim query failed for:', q, e.message); /* try next */ }
+        // Prefer results tagged as stadium/leisure; fall back to first result.
+        const best = d?.find(x => x.type === 'stadium' || x.class === 'leisure') || d?.[0];
+        if (best) {
+          lat = parseFloat(best.lat); lng = parseFloat(best.lon);
+          console.log('[initVenueMap] geocoded via:', JSON.stringify(q), '→', lat, lng);
+        }
+      } catch(e) { console.warn('[initVenueMap] Nominatim failed for:', q, e.message); }
     }
 
     if (!lat || !lng) {
-      mapEl.innerHTML = '<div class="map-loading">📍 No location found — add a City/State to this venue in the admin panel</div>';
+      mapEl.innerHTML = `<div class="map-loading" style="flex-direction:column;gap:10px">
+        <span>📍 Couldn't locate this venue on the map.</span>
+        <span style="font-size:12px;color:var(--muted)">Admin: add a City, State and/or Address in the venue editor to fix this.</span>
+      </div>`;
       return;
     }
 
