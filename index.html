@@ -1959,6 +1959,11 @@ async function loadVenueDetail(venueId, venueName) {
       const listEl = document.getElementById('venue-reviews-list');
       if (listEl) listEl.innerHTML = '<div class="empty-state"><h3>No Reviews Yet</h3><p>Be the first to rate this venue!</p></div>';
       loadAdminSpotlight(venueId);
+      // ← must still init map even when there are no community reviews
+      _venueMapData = venue;
+      if (!!(venue.address || venue.city || venue.name)) {
+        initVenueMap(venue).catch(e => console.error('map error:', e));
+      }
       return;
     }
 
