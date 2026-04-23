@@ -3482,22 +3482,15 @@ async function initVenueMap(venue) {
   const mapEl = document.getElementById('venue-map');
   if (!card || !mapEl) return;
 
-  // ── Fully tear down any previous Leaflet instance ───────────────────────
-  // map.remove() alone is NOT sufficient — Leaflet stamps a _leaflet_id on the
-  // container DOM node. If that property survives, the next L.map() call throws
-  // "Map container is already initialized", which is caught silently and leaves
-  // the user staring at an error banner. We must delete _leaflet_id explicitly.
+  // ── Tear down any previous Leaflet instance ─────────────────────────────
+  // We intentionally DO NOT reuse the same DOM node for Leaflet. Leaflet stamps
+  // a _leaflet_id property on the container; delete/nulling it is unreliable
+  // across browser/version combos. The only bulletproof reset is to replace the
+  // container's innerHTML with a fresh child div and mount Leaflet onto that.
   if (_venueMapInstance) {
     try { _venueMapInstance.remove(); } catch(e) {}
     _venueMapInstance = null;
   }
-  // Belt-and-suspenders: purge the container's internal Leaflet marker
-  try {
-    if (mapEl._leaflet_id != null) { delete mapEl._leaflet_id; }
-    // Also wipe any child nodes Leaflet may have injected so innerHTML reset is clean
-    mapEl.innerHTML = '';
-  } catch(e) {}
-
   mapEl.innerHTML = '<div class="map-loading"><span class="spinner"></span> Finding location…</div>';
   card.style.display = 'block';
 
@@ -3636,13 +3629,17 @@ async function initVenueMap(venue) {
     }
 
     // ── 2. Init map ──────────────────────────────────────────────────────
+    // Replace spinner with a brand-new div — Leaflet will own this node.
+    // Using a fresh element every navigation means _leaflet_id is never stale.
     mapEl.innerHTML = '';
-    // Yield to the browser so it recalculates the container's layout dimensions
-    // before Leaflet measures them. Without this, width:100% can resolve to 0
-    // when the card was just made visible in the same JS task.
-    await new Promise(r => setTimeout(r, 0));
+    const mapMount = document.createElement('div');
+    mapMount.style.cssText = 'width:100%;height:100%;';
+    mapEl.appendChild(mapMount);
 
-    // Guard: if Leaflet didn't load (network/CDN failure), show a fallback
+    // Yield one frame so the browser computes layout before Leaflet measures size
+    await new Promise(r => requestAnimationFrame(r));
+
+    // Guard: if Leaflet CDN failed to load, show a friendly fallback
     if (typeof L === 'undefined') {
       mapEl.innerHTML = `<div class="map-loading" style="flex-direction:column;gap:8px;text-align:center;padding:20px">
         <span style="font-size:20px">🗺</span>
@@ -3651,7 +3648,7 @@ async function initVenueMap(venue) {
       return;
     }
 
-    const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false }).setView([lat, lng], 15);
+    const map = L.map(mapMount, { zoomControl: true, scrollWheelZoom: false }).setView([lat, lng], 15);
     _venueMapInstance = map;
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -3659,8 +3656,8 @@ async function initVenueMap(venue) {
       maxZoom: 19,
     }).addTo(map);
 
-    // Recalculate tile grid after the container has been fully painted
-    setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, 250);
+    // Repaint tiles after the container has been fully painted (handles any sizing race)
+    setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, 300);
 
     // ── 3. Stadium marker ────────────────────────────────────────────────
     const mkStadium = L.divIcon({ className:'',
