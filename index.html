@@ -3482,11 +3482,22 @@ async function initVenueMap(venue) {
   const mapEl = document.getElementById('venue-map');
   if (!card || !mapEl) return;
 
-  // Destroy previous Leaflet instance — prevents "already initialized" crash
+  // ── Fully tear down any previous Leaflet instance ───────────────────────
+  // map.remove() alone is NOT sufficient — Leaflet stamps a _leaflet_id on the
+  // container DOM node. If that property survives, the next L.map() call throws
+  // "Map container is already initialized", which is caught silently and leaves
+  // the user staring at an error banner. We must delete _leaflet_id explicitly.
   if (_venueMapInstance) {
     try { _venueMapInstance.remove(); } catch(e) {}
     _venueMapInstance = null;
   }
+  // Belt-and-suspenders: purge the container's internal Leaflet marker
+  try {
+    if (mapEl._leaflet_id != null) { delete mapEl._leaflet_id; }
+    // Also wipe any child nodes Leaflet may have injected so innerHTML reset is clean
+    mapEl.innerHTML = '';
+  } catch(e) {}
+
   mapEl.innerHTML = '<div class="map-loading"><span class="spinner"></span> Finding location…</div>';
   card.style.display = 'block';
 
@@ -3626,6 +3637,20 @@ async function initVenueMap(venue) {
 
     // ── 2. Init map ──────────────────────────────────────────────────────
     mapEl.innerHTML = '';
+    // Yield to the browser so it recalculates the container's layout dimensions
+    // before Leaflet measures them. Without this, width:100% can resolve to 0
+    // when the card was just made visible in the same JS task.
+    await new Promise(r => setTimeout(r, 0));
+
+    // Guard: if Leaflet didn't load (network/CDN failure), show a fallback
+    if (typeof L === 'undefined') {
+      mapEl.innerHTML = `<div class="map-loading" style="flex-direction:column;gap:8px;text-align:center;padding:20px">
+        <span style="font-size:20px">🗺</span>
+        <span style="font-size:13px;color:var(--muted)">Map library failed to load. Check your connection.</span>
+      </div>`;
+      return;
+    }
+
     const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false }).setView([lat, lng], 15);
     _venueMapInstance = map;
 
@@ -3633,6 +3658,9 @@ async function initVenueMap(venue) {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>',
       maxZoom: 19,
     }).addTo(map);
+
+    // Recalculate tile grid after the container has been fully painted
+    setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, 250);
 
     // ── 3. Stadium marker ────────────────────────────────────────────────
     const mkStadium = L.divIcon({ className:'',
