@@ -343,6 +343,9 @@ nav ul a:hover{color:var(--ink)}
 .msb-fill{height:100%;background:var(--grad);border-radius:2px}
 .first-review-cta{margin-top:10px;padding:7px 10px;border-radius:6px;background:rgba(30,127,212,.08);border:1px dashed rgba(30,127,212,.25);font-size:11px;color:var(--blue-light);font-family:'Space Mono',monospace;text-align:center;letter-spacing:.3px}
 .sport-pill{display:inline-block;background:rgba(30,127,212,.1);border:1px solid rgba(30,127,212,.2);color:var(--blue-light);font-size:9px;font-family:'Space Mono',monospace;letter-spacing:1px;padding:2px 7px;border-radius:4px;text-transform:uppercase;margin-top:6px}
+.wc-badge{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#16a34a 0%,#1e7fd4 60%,#f59e0b 100%);color:#fff;font-size:9px;font-family:'Space Mono',monospace;letter-spacing:1px;padding:3px 8px;border-radius:4px;text-transform:uppercase;margin-top:6px;margin-left:6px;font-weight:700;box-shadow:0 0 0 1px rgba(255,255,255,.08) inset}
+.wc-badge::before{content:'⚽';font-size:11px}
+.wc-badge.hero{margin-left:8px;vertical-align:middle;font-size:10px;padding:4px 10px}
 /* ── LEAGUE FILTERS ── */
 .league-filters{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
 .lf-btn{padding:5px 13px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--muted);font-size:10px;font-family:'Space Mono',monospace;cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.5px}
@@ -675,6 +678,7 @@ nav ul a:hover{color:var(--ink)}
         <button class="lf-btn" onclick="filterHomeByLeague('MLS',this)">MLS</button>
         <button class="lf-btn" onclick="filterHomeByLeague('NHL',this)">NHL</button>
         <button class="lf-btn" onclick="filterHomeByLeague('NCAA',this)">NCAA</button>
+        <button class="lf-btn" onclick="filterHomeByLeague('WORLDCUP',this)" style="background:linear-gradient(135deg,rgba(22,163,74,.15),rgba(30,127,212,.15),rgba(245,158,11,.15));border-color:rgba(245,158,11,.35);color:#fff">⚽ World Cup 2026</button>
       </div>
       <div id="home-venue-grid"><div class="loading-cards"><span class="spinner"></span> Loading venues...</div></div>
     </div>
@@ -779,7 +783,7 @@ nav ul a:hover{color:var(--ink)}
       <div class="back-link" onclick="showPage('home')">← All Venues</div>
       <div class="venue-hero-row">
         <div class="venue-hero-left">
-          <div class="eyebrow" id="venue-sport-tag">NFL · Team</div>
+          <div class="eyebrow"><span id="venue-sport-tag">NFL · Team</span><span id="venue-wc-badge-slot"></span></div>
           <h1 id="venue-detail-name">Venue Name</h1>
           <div class="meta" id="venue-detail-meta">Location</div>
         </div>
@@ -1350,6 +1354,45 @@ const reactions = {};
 let _venueCache = null;        // cached venue list for browse
 let _venueCacheTime = 0;       // timestamp of last fetch
 const VENUE_CACHE_TTL = 60 * 1000; // 1 minute — short enough to see edits quickly
+
+// 2026 FIFA World Cup host venues (US, Canada, Mexico). Normalized lowercase.
+const _WC2026_VENUES = new Set([
+  'sofi stadium',
+  'metlife stadium',
+  'gillette stadium',
+  'hard rock stadium',
+  'mercedes-benz stadium',
+  'mercedes benz stadium',
+  'nrg stadium',
+  'at&t stadium',
+  'at and t stadium',
+  'lincoln financial field',
+  "levi's stadium",
+  'levis stadium',
+  'lumen field',
+  'arrowhead stadium',
+  'geha field at arrowhead stadium',
+  'bmo field',
+  'bc place',
+  'estadio azteca',
+  'estadio bbva',
+  'estadio akron'
+]);
+function isWorldCupVenue(v) {
+  if (!v) return false;
+  const n = (v.name || '').toLowerCase().trim();
+  if (!n) return false;
+  if (_WC2026_VENUES.has(n)) return true;
+  // Loose contains-match fallback for slight naming variations
+  for (const wc of _WC2026_VENUES) {
+    if (n.includes(wc) || wc.includes(n)) return true;
+  }
+  return false;
+}
+function wcBadgeHtml(variant) {
+  const cls = variant === 'hero' ? 'wc-badge hero' : 'wc-badge';
+  return `<span class="${cls}" title="2026 FIFA World Cup host venue">World Cup 2026</span>`;
+}
 
 // ── AUTO-LOGOUT (inactivity) ──────────────────────────────────────────────────
 const AUTO_LOGOUT_INACTIVE_MS = 60 * 60 * 1000;   // 60 min of no activity → sign out
@@ -1927,6 +1970,8 @@ async function loadVenueDetail(venueId, venueName) {
     } catch(e) { /* non-fatal */ }
 
     setEl('venue-sport-tag', [venue.sport, venue.team].filter(Boolean).join(' · ') || 'Venue');
+    const _wcSlot = document.getElementById('venue-wc-badge-slot');
+    if (_wcSlot) _wcSlot.innerHTML = isWorldCupVenue(venue) ? wcBadgeHtml('hero') : '';
     setEl('venue-detail-meta', [venue.city, venue.state].filter(Boolean).join(', '));
     setEl('vd-sport', venue.sport || '–');
     setEl('vd-team', venue.team || '–');
@@ -2085,9 +2130,10 @@ function buildVenueCardInner(v, onClickAttr) {
       }).join('')}</div>`
     : `<div class="first-review-cta">⭐ Be the first to review</div>`;
   const sportPill = v.sport ? `<span class="sport-pill">${v.sport}</span>` : '';
+  const wcPill = isWorldCupVenue(v) ? wcBadgeHtml() : '';
   return `<div class="review-card" style="cursor:pointer" ${onClickAttr}>
     <div class="card-top">
-      <div style="min-width:0"><div class="venue-name">${v.name}</div><div class="venue-meta">${location}</div>${sportPill}</div>
+      <div style="min-width:0"><div class="venue-name">${v.name}</div><div class="venue-meta">${location}</div>${sportPill}${wcPill}</div>
       ${badge}
     </div>
     ${miniSection}
@@ -2131,7 +2177,9 @@ function filterHomeVenues(query) {
   let filtered = q ? _venueCache.filter(v =>
     [v.name, v.city, v.state, v.sport, v.team].some(f => f?.toLowerCase().includes(q))
   ) : _venueCache;
-  if (_activeLeagueFilter !== 'all') {
+  if (_activeLeagueFilter === 'WORLDCUP') {
+    filtered = filtered.filter(v => isWorldCupVenue(v));
+  } else if (_activeLeagueFilter !== 'all') {
     filtered = filtered.filter(v => v.sport?.toUpperCase() === _activeLeagueFilter);
   }
   renderHomeVenueGrid(filtered);
@@ -2147,10 +2195,7 @@ function filterHomeByLeague(league, btn) {
 }
 
 function handleVenueClick(venueId, venueName) {
-  if (!currentUser) {
-    openModal('auth');
-    return;
-  }
+  // Public: anyone can view venue details. Review submission is still gated.
   loadVenueDetail(venueId, venueName);
 }
 
@@ -2162,6 +2207,8 @@ async function loadVenueBrowse() {
   const _setT = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   _setT('venue-detail-name', 'Browse Venues');
   _setT('venue-sport-tag', 'Find & Review Stadiums');
+  const _wcSlotB = document.getElementById('venue-wc-badge-slot');
+  if (_wcSlotB) _wcSlotB.innerHTML = '';
   _setT('venue-detail-meta', 'Discover venues near you');
   _setT('venue-big-score', '–');
   _setT('venue-review-count', 'Explore & Rate');
