@@ -319,6 +319,29 @@ nav ul a:hover{color:var(--ink)}
 
 /* ── VENUE FOOD MAP ── */
 .venue-map-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:24px}
+/* ── EATS NEARBY ── */
+.eats-section{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 20px 20px;margin-bottom:24px}
+.eats-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap}
+.eats-header h3{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;text-transform:uppercase;margin:0;letter-spacing:.5px}
+.eats-count{font-family:'Space Mono',monospace;font-size:11px;color:var(--blue-light)}
+.eats-strip{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 12px;margin:0 -2px;-webkit-overflow-scrolling:touch}
+.eats-strip::-webkit-scrollbar{height:6px}
+.eats-strip::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.eats-card{flex:0 0 240px;scroll-snap-align:start;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s,transform .15s}
+.eats-card:hover{border-color:var(--border2);transform:translateY(-1px)}
+.eats-card.is-pick{border-color:rgba(245,158,11,.5);background:linear-gradient(180deg,rgba(245,158,11,.05),var(--bg) 60%)}
+.eats-pick-flag{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.2px;color:#f59e0b;font-weight:700}
+.eats-name{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;line-height:1.2;color:var(--ink)}
+.eats-meta{font-size:11px;color:var(--muted);text-transform:capitalize}
+.eats-dist{font-family:'Space Mono',monospace;font-size:10px;color:var(--blue-light)}
+.eats-note{font-size:12px;color:var(--ink);font-style:italic;line-height:1.4;background:rgba(245,158,11,.06);border-left:2px solid rgba(245,158,11,.4);padding:6px 8px;border-radius:3px;margin-top:4px}
+.eats-ctas{display:flex;flex-direction:column;gap:6px;margin-top:auto;padding-top:10px}
+.eats-btn{display:block;text-align:center;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:12px;font-weight:600;text-decoration:none;transition:all .12s;cursor:pointer}
+.eats-btn:hover{border-color:var(--blue);color:var(--blue-light)}
+.eats-btn.primary{background:rgba(30,127,212,.12);border-color:rgba(30,127,212,.4);color:var(--blue-light)}
+.eats-btn.primary:hover{background:rgba(30,127,212,.2)}
+.eats-disclosure{font-size:10px;color:var(--muted);text-align:center;margin:6px 0 0;font-family:'Space Mono',monospace}
+.eats-empty{color:var(--muted);font-size:13px;padding:8px 0;text-align:center}
 .venue-map-header{padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
 .venue-map-title{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
 .venue-map-subtitle{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:2px}
@@ -819,6 +842,9 @@ nav ul a:hover{color:var(--ink)}
           </div>
         </div>
       </div>
+
+      <!-- EATS & DRINKS NEARBY (cards) -->
+      <div id="venue-eats-nearby" class="eats-section" style="display:none"></div>
 
       <!-- FOOD MAP -->
       <div class="venue-map-card" id="venue-map-card" style="display:none">
@@ -1392,6 +1418,120 @@ function isWorldCupVenue(v) {
 function wcBadgeHtml(variant) {
   const cls = variant === 'hero' ? 'wc-badge hero' : 'wc-badge';
   return `<span class="${cls}" title="2026 FIFA World Cup host venue">World Cup 2026</span>`;
+}
+
+// ── EATS NEARBY ──────────────────────────────────────────────────────────
+// Affiliate IDs (fill in later — links work without them, just unattributed)
+const AFFILIATE = {
+  opentable_rid: '',
+  // doordash_ref: '',
+  // skimlinks: false,  // if true, plain links auto-monetize via Skimlinks script
+};
+
+function _escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function _haversineMi(lat1, lng1, lat2, lng2) {
+  if ([lat1, lng1, lat2, lng2].some(v => v == null || isNaN(v))) return null;
+  const toRad = d => d * Math.PI / 180;
+  const R = 3958.8; // miles
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function _eatsCTAs(place, venue) {
+  const q = encodeURIComponent([place.name, venue.city, venue.state].filter(Boolean).join(' '));
+  const otRef = AFFILIATE.opentable_rid ? `&ref=${encodeURIComponent(AFFILIATE.opentable_rid)}` : '';
+  const directions = (place.lat && place.lng)
+    ? `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${q}`;
+  return {
+    reserve: `https://www.opentable.com/s?term=${q}${otRef}`,
+    order:   `https://www.google.com/search?q=${q}+order+delivery`,
+    directions
+  };
+}
+
+function _trackEatsClick(action, name) {
+  // Stub for future analytics — log for now so we can verify clicks happen.
+  try { console.log('[eats-click]', action, name); } catch(e) {}
+}
+
+function _eatsCardHtml(p, venue) {
+  const c = _eatsCTAs(p, venue);
+  const meta = [p.cuisine, p.type].filter(Boolean).join(' · ').replace(/_/g,' ');
+  const distLabel = (p.distMi != null) ? `${p.distMi < 0.1 ? '<0.1' : p.distMi.toFixed(1)} mi away` : '';
+  const safeName = _escapeHtml(p.name);
+  const onClick = action => `_trackEatsClick('${action}', ${JSON.stringify(p.name).replace(/'/g, "\\'")})`;
+  return `
+    <div class="eats-card ${p.isPick ? 'is-pick' : ''}">
+      ${p.isPick ? '<div class="eats-pick-flag">⭐ 141 PICK</div>' : ''}
+      <div class="eats-name">${safeName}</div>
+      ${meta ? `<div class="eats-meta">${_escapeHtml(meta)}</div>` : ''}
+      ${distLabel ? `<div class="eats-dist">${distLabel}</div>` : ''}
+      ${p.note ? `<div class="eats-note">"${_escapeHtml(p.note)}"</div>` : ''}
+      <div class="eats-ctas">
+        <a class="eats-btn primary" href="${c.reserve}" target="_blank" rel="noopener sponsored" onclick="${onClick('reserve')}">🍽 Reserve</a>
+        <a class="eats-btn"         href="${c.order}"   target="_blank" rel="noopener sponsored" onclick="${onClick('order')}">🛵 Order / Find</a>
+        <a class="eats-btn"         href="${c.directions}" target="_blank" rel="noopener" onclick="${onClick('directions')}">🗺 Directions</a>
+      </div>
+    </div>`;
+}
+
+function renderEatsNearby(venue, picks, overpassPlaces) {
+  const wrap = document.getElementById('venue-eats-nearby');
+  if (!wrap) return;
+  if (!venue || venue.lat == null || venue.lng == null) { wrap.style.display = 'none'; return; }
+
+  const vLat = parseFloat(venue.lat), vLng = parseFloat(venue.lng);
+
+  // Normalize 141 picks
+  const pickList = (picks || []).filter(p => p && p.name && p.lat && p.lng).map(p => ({
+    name: p.name,
+    type: p.type || '',
+    note: p.note || '',
+    lat: parseFloat(p.lat),
+    lng: parseFloat(p.lng),
+    isPick: true
+  }));
+
+  // Normalize Overpass results, dedupe vs picks by lowercase name
+  const pickNames = new Set(pickList.map(p => p.name.toLowerCase().trim()));
+  const opList = (overpassPlaces || [])
+    .filter(p => p && p.name && p.lat && p.lng && !pickNames.has(p.name.toLowerCase().trim()))
+    .map(p => ({
+      name: p.name,
+      type: p.type || 'Food & Drink',
+      cuisine: p.cuisine || '',
+      lat: parseFloat(p.lat),
+      lng: parseFloat(p.lng),
+      isPick: false
+    }));
+
+  const all = [...pickList, ...opList];
+  all.forEach(p => p.distMi = _haversineMi(vLat, vLng, p.lat, p.lng));
+  // Picks first, then by distance
+  all.sort((a, b) => (b.isPick - a.isPick) || ((a.distMi ?? 999) - (b.distMi ?? 999)));
+
+  if (!all.length) { wrap.style.display = 'none'; return; }
+
+  const visible = all.slice(0, 12);
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <div class="eats-header">
+      <h3>🍽 Eats &amp; Drinks Near ${_escapeHtml(venue.name || 'the Venue')}</h3>
+      <div class="eats-count">${all.length} spot${all.length===1?'':'s'} within walking distance</div>
+    </div>
+    <div class="eats-strip">
+      ${visible.map(p => _eatsCardHtml(p, venue)).join('')}
+    </div>
+    <div class="eats-disclosure">Some links may earn 141 venn-U a small commission — never affects what you pay.</div>
+  `;
 }
 
 // ── AUTO-LOGOUT (inactivity) ──────────────────────────────────────────────────
@@ -2219,6 +2359,7 @@ async function loadVenueBrowse() {
   _hide('admin-scoresheet-display');
   _hide('admin-scoresheet-editor');
   _hide('venue-map-card');
+  _hide('venue-eats-nearby');
   // Destroy any active map instance so it doesn't linger
   if (_venueMapInstance) { try { _venueMapInstance.remove(); } catch(e) {} _venueMapInstance = null; }
   try {
@@ -3766,6 +3907,7 @@ async function initVenueMap(venue) {
     if (countEl && mapPlaces.length) countEl.textContent = `${mapPlaces.length} 141 pick${mapPlaces.length>1?'s':''}`;
 
     // ── 5. Nearby food from Overpass (non-blocking, best-effort) ─────────
+    let nearbyPlaces = []; // also feeds the eats-nearby card section
     try {
       const ovQ = `[out:json][timeout:10];(node["amenity"~"^(restaurant|bar|pub|cafe|fast_food|food_court)$"](around:800,${lat},${lng});way["amenity"~"^(restaurant|bar|pub|cafe|fast_food)$"](around:800,${lat},${lng}););out center 40;`;
       const ovR = await _fetchWithTimeout(
@@ -3785,9 +3927,10 @@ async function initVenueMap(venue) {
         const name = el.tags?.name;
         if (!eLat || !eLng || !name) return;
         const type = aLabel[el.tags?.amenity] || 'Food & Drink';
-        const cuisine = el.tags?.cuisine ? ` · ${el.tags.cuisine.replace(/_/g,' ')}` : '';
+        const cuisine = el.tags?.cuisine ? el.tags.cuisine.replace(/_/g,' ').replace(/;/g,', ') : '';
         L.marker([eLat,eLng],{icon:mkBlue}).addTo(map)
-          .bindPopup(`<strong>${name}</strong><div class="pop-type">${type}${cuisine}</div>`);
+          .bindPopup(`<strong>${name}</strong><div class="pop-type">${type}${cuisine ? ' · '+cuisine : ''}</div>`);
+        nearbyPlaces.push({ name, lat: eLat, lng: eLng, type, cuisine });
         nearby++;
       });
       if (countEl) {
@@ -3801,6 +3944,11 @@ async function initVenueMap(venue) {
       // Overpass failed — map still works, just no auto-nearby markers
       console.warn('Overpass unavailable:', e.message);
     }
+
+    // Render the cards section using picks + whatever Overpass returned
+    try {
+      renderEatsNearby({ ...venue, lat, lng }, mapPlaces, nearbyPlaces);
+    } catch(e) { console.warn('renderEatsNearby error:', e); }
 
   } catch(e) {
     console.error('initVenueMap error:', e);
