@@ -1483,52 +1483,41 @@ function _eatsCardHtml(p, venue) {
     </div>`;
 }
 
-function renderEatsNearby(venue, picks, overpassPlaces) {
+function renderEatsNearby(venue, picks /*, overpassPlaces (intentionally unused — official 141 picks only) */) {
   const wrap = document.getElementById('venue-eats-nearby');
   if (!wrap) return;
-  if (!venue || venue.lat == null || venue.lng == null) { wrap.style.display = 'none'; return; }
+  if (!venue) { wrap.style.display = 'none'; return; }
 
-  const vLat = parseFloat(venue.lat), vLng = parseFloat(venue.lng);
+  const vLat = venue.lat != null ? parseFloat(venue.lat) : null;
+  const vLng = venue.lng != null ? parseFloat(venue.lng) : null;
 
-  // Normalize 141 picks
-  const pickList = (picks || []).filter(p => p && p.name && p.lat && p.lng).map(p => ({
-    name: p.name,
-    type: p.type || '',
-    note: p.note || '',
-    lat: parseFloat(p.lat),
-    lng: parseFloat(p.lng),
-    isPick: true
-  }));
-
-  // Normalize Overpass results, dedupe vs picks by lowercase name
-  const pickNames = new Set(pickList.map(p => p.name.toLowerCase().trim()));
-  const opList = (overpassPlaces || [])
-    .filter(p => p && p.name && p.lat && p.lng && !pickNames.has(p.name.toLowerCase().trim()))
-    .map(p => ({
+  // ONLY official 141 picks — Overpass spots stay on the map, not in the cards
+  const pickList = (picks || []).filter(p => p && p.name).map(p => {
+    const pLat = p.lat != null ? parseFloat(p.lat) : null;
+    const pLng = p.lng != null ? parseFloat(p.lng) : null;
+    return {
       name: p.name,
-      type: p.type || 'Food & Drink',
-      cuisine: p.cuisine || '',
-      lat: parseFloat(p.lat),
-      lng: parseFloat(p.lng),
-      isPick: false
-    }));
+      type: p.type || '',
+      note: p.note || '',
+      lat: pLat,
+      lng: pLng,
+      isPick: true,
+      distMi: (vLat != null && pLat != null) ? _haversineMi(vLat, vLng, pLat, pLng) : null
+    };
+  });
 
-  const all = [...pickList, ...opList];
-  all.forEach(p => p.distMi = _haversineMi(vLat, vLng, p.lat, p.lng));
-  // Picks first, then by distance
-  all.sort((a, b) => (b.isPick - a.isPick) || ((a.distMi ?? 999) - (b.distMi ?? 999)));
+  pickList.sort((a, b) => (a.distMi ?? 999) - (b.distMi ?? 999));
 
-  if (!all.length) { wrap.style.display = 'none'; return; }
+  if (!pickList.length) { wrap.style.display = 'none'; return; }
 
-  const visible = all.slice(0, 12);
   wrap.style.display = 'block';
   wrap.innerHTML = `
     <div class="eats-header">
-      <h3>🍽 Eats &amp; Drinks Near ${_escapeHtml(venue.name || 'the Venue')}</h3>
-      <div class="eats-count">${all.length} spot${all.length===1?'':'s'} within walking distance</div>
+      <h3>⭐ 141 Picks Near ${_escapeHtml(venue.name || 'the Venue')}</h3>
+      <div class="eats-count">${pickList.length} official pick${pickList.length===1?'':'s'}</div>
     </div>
     <div class="eats-strip">
-      ${visible.map(p => _eatsCardHtml(p, venue)).join('')}
+      ${pickList.map(p => _eatsCardHtml(p, venue)).join('')}
     </div>
     <div class="eats-disclosure">Some links may earn 141 venn-U a small commission — never affects what you pay.</div>
   `;
