@@ -332,6 +332,7 @@ nav ul a:hover{color:var(--ink)}
 .eats-card.is-pick{border-color:rgba(245,158,11,.5);background:linear-gradient(180deg,rgba(245,158,11,.05),var(--bg) 60%)}
 .eats-pick-flag{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.2px;color:#f59e0b;font-weight:700}
 .eats-name{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;line-height:1.2;color:var(--ink)}
+.eats-emoji{font-size:18px;line-height:1;margin-right:2px;font-family:'Apple Color Emoji','Segoe UI Emoji',sans-serif}
 .eats-meta{font-size:11px;color:var(--muted);text-transform:capitalize}
 .eats-dist{font-family:'Space Mono',monospace;font-size:10px;color:var(--blue-light)}
 .eats-note{font-size:12px;color:var(--ink);font-style:italic;line-height:1.4;background:rgba(245,158,11,.06);border-left:2px solid rgba(245,158,11,.4);padding:6px 8px;border-radius:3px;margin-top:4px}
@@ -806,7 +807,7 @@ nav ul a:hover{color:var(--ink)}
       <div class="back-link" onclick="showPage('home')">← All Venues</div>
       <div class="venue-hero-row">
         <div class="venue-hero-left">
-          <div class="eyebrow"><span id="venue-sport-tag">NFL · Team</span><span id="venue-wc-badge-slot"></span></div>
+          <div class="eyebrow"><span id="venue-sport-tag">NFL · Team</span></div>
           <h1 id="venue-detail-name">Venue Name</h1>
           <div class="meta" id="venue-detail-meta">Location</div>
         </div>
@@ -1407,11 +1408,13 @@ const _WC2026_VENUES = new Set([
 function isWorldCupVenue(v) {
   if (!v) return false;
   const n = (v.name || '').toLowerCase().trim();
-  if (!n) return false;
+  if (n.length < 5) return false;
   if (_WC2026_VENUES.has(n)) return true;
-  // Loose contains-match fallback for slight naming variations
+  // Only allow match when the WC venue name is a substring of the stored
+  // venue name (handles "MetLife Stadium (East Rutherford)" etc.). The reverse
+  // direction is unsafe — short tokens like "field" would false-positive.
   for (const wc of _WC2026_VENUES) {
-    if (n.includes(wc) || wc.includes(n)) return true;
+    if (wc.length >= 6 && n.includes(wc)) return true;
   }
   return false;
 }
@@ -1468,10 +1471,11 @@ function _eatsCardHtml(p, venue) {
   const distLabel = (p.distMi != null) ? `${p.distMi < 0.1 ? '<0.1' : p.distMi.toFixed(1)} mi away` : '';
   const safeName = _escapeHtml(p.name);
   const onClick = action => `_trackEatsClick('${action}', ${JSON.stringify(p.name).replace(/'/g, "\\'")})`;
+  const emoji = p.emoji ? `<span class="eats-emoji">${_escapeHtml(p.emoji)}</span> ` : '';
   return `
     <div class="eats-card ${p.isPick ? 'is-pick' : ''}">
       ${p.isPick ? '<div class="eats-pick-flag">⭐ 141 PICK</div>' : ''}
-      <div class="eats-name">${safeName}</div>
+      <div class="eats-name">${emoji}${safeName}</div>
       ${meta ? `<div class="eats-meta">${_escapeHtml(meta)}</div>` : ''}
       ${distLabel ? `<div class="eats-dist">${distLabel}</div>` : ''}
       ${p.note ? `<div class="eats-note">"${_escapeHtml(p.note)}"</div>` : ''}
@@ -1497,6 +1501,7 @@ function renderEatsNearby(venue, picks /*, overpassPlaces (intentionally unused 
     const pLng = p.lng != null ? parseFloat(p.lng) : null;
     return {
       name: p.name,
+      emoji: p.emoji || '',
       type: p.type || '',
       note: p.note || '',
       lat: pLat,
@@ -2099,8 +2104,6 @@ async function loadVenueDetail(venueId, venueName) {
     } catch(e) { /* non-fatal */ }
 
     setEl('venue-sport-tag', [venue.sport, venue.team].filter(Boolean).join(' · ') || 'Venue');
-    const _wcSlot = document.getElementById('venue-wc-badge-slot');
-    if (_wcSlot) _wcSlot.innerHTML = isWorldCupVenue(venue) ? wcBadgeHtml('hero') : '';
     setEl('venue-detail-meta', [venue.city, venue.state].filter(Boolean).join(', '));
     setEl('vd-sport', venue.sport || '–');
     setEl('vd-team', venue.team || '–');
@@ -2336,8 +2339,6 @@ async function loadVenueBrowse() {
   const _setT = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   _setT('venue-detail-name', 'Browse Venues');
   _setT('venue-sport-tag', 'Find & Review Stadiums');
-  const _wcSlotB = document.getElementById('venue-wc-badge-slot');
-  if (_wcSlotB) _wcSlotB.innerHTML = '';
   _setT('venue-detail-meta', 'Discover venues near you');
   _setT('venue-big-score', '–');
   _setT('venue-review-count', 'Explore & Rate');
@@ -3815,14 +3816,30 @@ async function initVenueMap(venue) {
       'ppg paints arena':                      [40.4395,   -79.9892],
     };
 
-    if (venue.lat && venue.lng && !isNaN(parseFloat(venue.lat)) && !isNaN(parseFloat(venue.lng))) {
-      lat = parseFloat(venue.lat);
-      lng = parseFloat(venue.lng);
+    const _storedLat = parseFloat(venue.lat);
+    const _storedLng = parseFloat(venue.lng);
+    const _storedOk = !isNaN(_storedLat) && !isNaN(_storedLng) && (_storedLat !== 0 || _storedLng !== 0);
+    if (_storedOk) {
+      lat = _storedLat;
+      lng = _storedLng;
       console.log('[initVenueMap] using stored coords:', lat, lng);
     } else {
-      // Try the built-in table by normalized venue name
-      const normName = (venue.name || '').toLowerCase().trim();
-      const known = _KNOWN_COORDS[normName];
+      // Try the built-in table by normalized venue name; tolerant to
+      // punctuation/whitespace ("MetLife Stadium" → "metlifestadium").
+      const rawName = (venue.name || '').toLowerCase().trim();
+      const stripped = rawName.replace(/[^a-z0-9]/g, '');
+      let known = _KNOWN_COORDS[rawName];
+      if (!known) {
+        for (const key of Object.keys(_KNOWN_COORDS)) {
+          if (key.replace(/[^a-z0-9]/g, '') === stripped) { known = _KNOWN_COORDS[key]; break; }
+        }
+      }
+      if (!known && stripped) {
+        for (const key of Object.keys(_KNOWN_COORDS)) {
+          const k = key.replace(/[^a-z0-9]/g, '');
+          if (k && (stripped.includes(k) || k.includes(stripped))) { known = _KNOWN_COORDS[key]; break; }
+        }
+      }
       if (known) {
         lat = known[0]; lng = known[1];
         console.log('[initVenueMap] using built-in coords for:', venue.name);
@@ -3831,7 +3848,7 @@ async function initVenueMap(venue) {
       }
     }
 
-    if (!lat || !lng) {
+    if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
       const gmq = encodeURIComponent([venue.name, venue.city, venue.state].filter(Boolean).join(' '));
       mapEl.innerHTML = `<div class="map-loading" style="flex-direction:column;gap:10px;text-align:center;padding:20px">
         <span style="font-size:24px">📍</span>
@@ -3887,8 +3904,9 @@ async function initVenueMap(venue) {
       iconSize:[18,18], iconAnchor:[9,9] });
     mapPlaces.forEach(p => {
       if (!p.lat || !p.lng) return;
+      const emojiPrefix = p.emoji ? p.emoji + ' ' : '';
       L.marker([parseFloat(p.lat), parseFloat(p.lng)], {icon:mkGold}).addTo(map)
-        .bindPopup(`<strong>${p.name}</strong><div class="pop-type">⭐ 141 Pick${p.type ? ' · '+p.type : ''}${p.note ? '<br>'+p.note : ''}</div>`);
+        .bindPopup(`<strong>${emojiPrefix}${p.name}</strong><div class="pop-type">⭐ 141 Pick${p.type ? ' · '+p.type : ''}${p.note ? '<br>'+p.note : ''}</div>`);
     });
 
     // Update pick count in header
@@ -3964,7 +3982,17 @@ function addMapPlaceRow(place = {}) {
   try {
     const row = document.createElement('div');
     row.className = 'map-place-row';
-    row.style.cssText = 'display:grid;grid-template-columns:1fr 110px 80px 80px auto;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px';
+    row.style.cssText = 'display:grid;grid-template-columns:48px 1fr 110px 80px 80px auto;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px';
+
+    // Cuisine emoji input — single character (or paste any emoji), e.g. 🍕 🌮 🍣
+    const emojiInput = document.createElement('input');
+    emojiInput.type = 'text';
+    emojiInput.placeholder = '🍽';
+    emojiInput.value = place.emoji || '';
+    emojiInput.maxLength = 4; // some emoji are multi-codepoint
+    emojiInput.title = 'Cuisine emoji (e.g. 🍕 🌮 🍣 🍔 ☕ 🍻)';
+    emojiInput.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:4px 6px;color:var(--ink);font-size:18px;text-align:center;width:100%;box-sizing:border-box';
+    emojiInput.dataset.field = 'emoji';
 
     // Name input — set via .value, not innerHTML, so quotes/apostrophes are safe
     const nameInput = document.createElement('input');
@@ -4013,6 +4041,7 @@ function addMapPlaceRow(place = {}) {
     removeBtn.style.cssText = 'background:none;border:none;color:var(--dislike);cursor:pointer;font-size:16px;padding:0 4px;flex-shrink:0';
     removeBtn.addEventListener('click', () => row.remove());
 
+    row.appendChild(emojiInput);
     row.appendChild(nameInput);
     row.appendChild(typeSelect);
     row.appendChild(latInput);
@@ -4028,10 +4057,11 @@ function addMapPlaceRow(place = {}) {
 function getMapPlaces() {
   return [...(document.getElementById('adv-map-places-list')?.querySelectorAll('.map-place-row') || [])]
     .map(row => ({
-      name: row.querySelector('[data-field="name"]')?.value.trim() || '',
-      type: row.querySelector('[data-field="type"]')?.value || 'restaurant',
-      lat:  parseFloat(row.querySelector('[data-field="lat"]')?.value) || null,
-      lng:  parseFloat(row.querySelector('[data-field="lng"]')?.value) || null,
+      name:  row.querySelector('[data-field="name"]')?.value.trim() || '',
+      emoji: row.querySelector('[data-field="emoji"]')?.value.trim() || '',
+      type:  row.querySelector('[data-field="type"]')?.value || 'restaurant',
+      lat:   parseFloat(row.querySelector('[data-field="lat"]')?.value) || null,
+      lng:   parseFloat(row.querySelector('[data-field="lng"]')?.value) || null,
     }))
     .filter(p => p.name); // skip rows with no name
 }
