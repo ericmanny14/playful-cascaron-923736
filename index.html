@@ -3816,36 +3816,48 @@ async function initVenueMap(venue) {
       'ppg paints arena':                      [40.4395,   -79.9892],
     };
 
+    // Resolve a name-keyed entry from the built-in table (tolerant to
+    // punctuation/whitespace differences).
+    const lookupKnownCoords = (name) => {
+      const rawName = (name || '').toLowerCase().trim();
+      if (!rawName) return null;
+      if (_KNOWN_COORDS[rawName]) return _KNOWN_COORDS[rawName];
+      const stripped = rawName.replace(/[^a-z0-9]/g, '');
+      if (!stripped) return null;
+      for (const key of Object.keys(_KNOWN_COORDS)) {
+        if (key.replace(/[^a-z0-9]/g, '') === stripped) return _KNOWN_COORDS[key];
+      }
+      for (const key of Object.keys(_KNOWN_COORDS)) {
+        const k = key.replace(/[^a-z0-9]/g, '');
+        if (k && (stripped.includes(k) || k.includes(stripped))) return _KNOWN_COORDS[key];
+      }
+      return null;
+    };
+
     const _storedLat = parseFloat(venue.lat);
     const _storedLng = parseFloat(venue.lng);
     const _storedOk = !isNaN(_storedLat) && !isNaN(_storedLng) && (_storedLat !== 0 || _storedLng !== 0);
+    const _known = lookupKnownCoords(venue.name);
+
     if (_storedOk) {
-      lat = _storedLat;
-      lng = _storedLng;
-      console.log('[initVenueMap] using stored coords:', lat, lng);
-    } else {
-      // Try the built-in table by normalized venue name; tolerant to
-      // punctuation/whitespace ("MetLife Stadium" → "metlifestadium").
-      const rawName = (venue.name || '').toLowerCase().trim();
-      const stripped = rawName.replace(/[^a-z0-9]/g, '');
-      let known = _KNOWN_COORDS[rawName];
-      if (!known) {
-        for (const key of Object.keys(_KNOWN_COORDS)) {
-          if (key.replace(/[^a-z0-9]/g, '') === stripped) { known = _KNOWN_COORDS[key]; break; }
+      // If we have a built-in entry AND stored coords are >50 miles away from
+      // it, the stored value is almost certainly a typo — trust the lookup.
+      if (_known) {
+        const _drift = _haversineMi(_storedLat, _storedLng, _known[0], _known[1]);
+        if (_drift != null && _drift > 50) {
+          lat = _known[0]; lng = _known[1];
+          console.warn('[initVenueMap] stored coords far from known location ('+_drift.toFixed(0)+' mi). Using built-in for:', venue.name);
+        } else {
+          lat = _storedLat; lng = _storedLng;
         }
-      }
-      if (!known && stripped) {
-        for (const key of Object.keys(_KNOWN_COORDS)) {
-          const k = key.replace(/[^a-z0-9]/g, '');
-          if (k && (stripped.includes(k) || k.includes(stripped))) { known = _KNOWN_COORDS[key]; break; }
-        }
-      }
-      if (known) {
-        lat = known[0]; lng = known[1];
-        console.log('[initVenueMap] using built-in coords for:', venue.name);
       } else {
-        console.warn('[initVenueMap] no coords for venue:', venue.id, venue.name);
+        lat = _storedLat; lng = _storedLng;
       }
+    } else if (_known) {
+      lat = _known[0]; lng = _known[1];
+      console.log('[initVenueMap] using built-in coords for:', venue.name);
+    } else {
+      console.warn('[initVenueMap] no coords for venue:', venue.id, venue.name);
     }
 
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
