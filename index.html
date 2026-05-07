@@ -343,6 +343,26 @@ nav ul a:hover{color:var(--ink)}
 .eats-btn.primary:hover{background:rgba(30,127,212,.2)}
 .eats-disclosure{font-size:10px;color:var(--muted);text-align:center;margin:6px 0 0;font-family:'Space Mono',monospace}
 .eats-empty{color:var(--muted);font-size:13px;padding:8px 0;text-align:center}
+/* ── GETTING THERE (access tips) ── */
+.access-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 20px 16px;margin-bottom:24px}
+.access-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap}
+.access-card-header h3{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;text-transform:uppercase;margin:0;letter-spacing:.5px}
+.access-tip-row{display:flex;gap:12px;padding:10px 0;border-top:1px dashed var(--border)}
+.access-tip-row:first-of-type{border-top:none;padding-top:4px}
+.access-tip-icon{flex:0 0 36px;height:36px;border-radius:8px;background:rgba(30,127,212,.1);border:1px solid rgba(30,127,212,.2);display:flex;align-items:center;justify-content:center;font-size:18px}
+.access-tip-body{flex:1;min-width:0}
+.access-tip-label{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.6px;color:var(--blue-light);text-transform:uppercase;margin-bottom:3px}
+.access-tip-text{font-size:13px;color:var(--ink);line-height:1.45;white-space:pre-wrap}
+.access-edit-card{background:linear-gradient(180deg,rgba(245,158,11,.04),var(--bg2) 70%);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:18px 20px;margin-bottom:24px}
+.access-edit-card .aec-title{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin:0 0 10px;color:#f59e0b;display:flex;align-items:center;gap:6px}
+.access-edit-card .aec-sub{font-size:11px;color:var(--muted);margin-bottom:14px;font-family:'Space Mono',monospace}
+.access-edit-row{display:flex;gap:10px;margin-bottom:10px;align-items:flex-start}
+.access-edit-row .aer-icon{flex:0 0 36px;height:36px;border-radius:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);display:flex;align-items:center;justify-content:center;font-size:18px;margin-top:18px}
+.access-edit-row .aer-field{flex:1;min-width:0}
+.access-edit-row label{display:block;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.6px;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
+.access-edit-row textarea{width:100%;min-height:50px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--ink);font-size:13px;font-family:inherit;resize:vertical;line-height:1.4;box-sizing:border-box}
+.access-edit-row textarea:focus{outline:none;border-color:rgba(245,158,11,.5)}
+.access-edit-actions{display:flex;gap:10px;margin-top:12px}
 /* ── WORLD CUP GAMES SIDEBAR CARD ── */
 .wc-games-card{background:linear-gradient(180deg,rgba(245,158,11,.06),var(--bg2) 70%);border:1px solid rgba(245,158,11,.35);border-radius:12px;padding:16px 16px 14px;margin-bottom:16px;position:relative;overflow:hidden}
 .wc-games-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#16a34a,#1e7fd4,#f59e0b)}
@@ -866,6 +886,10 @@ nav ul a:hover{color:var(--ink)}
           </div>
         </div>
       </div>
+
+      <!-- GETTING THERE (admin-curated access tips) -->
+      <div id="venue-access-card" class="access-card" style="display:none"></div>
+      <div id="venue-access-edit" class="access-edit-card" style="display:none"></div>
 
       <!-- EATS & DRINKS NEARBY (cards) -->
       <div id="venue-eats-nearby" class="eats-section" style="display:none"></div>
@@ -1758,6 +1782,97 @@ function _trackEatsClick(action, name) {
   try { console.log('[eats-click]', action, name); } catch(e) {}
 }
 
+// ── GETTING THERE (admin-curated access tips) ─────────────────────────
+// Stored at admin_scoresheet.access_tips = { parking, transit, rideshare, walking, general }
+const _ACCESS_FIELDS = [
+  { key: 'parking',   icon: '🅿️', label: 'Parking',     hint: 'Lot prices, where to pre-book, free street alternatives, lot capacity tips.' },
+  { key: 'transit',   icon: '🚆', label: 'Public Transit', hint: 'Train/bus lines, nearest stop, walk distance, schedule notes.' },
+  { key: 'rideshare', icon: '🚕', label: 'Ride-Share',  hint: 'Uber/Lyft pickup zones, surge timing, best drop-off spots.' },
+  { key: 'walking',   icon: '🚶', label: 'Walk / Bike', hint: 'Walking routes, bike racks, distance from popular hotels.' },
+  { key: 'general',   icon: '💡', label: 'General Tips', hint: 'Anything else — arrival times, traffic patterns, security lines, ADA notes.' }
+];
+
+function _accessTipsFromVenue(venue) {
+  return venue?.admin_scoresheet?.access_tips || {};
+}
+function _hasAnyAccessTip(tips) {
+  return _ACCESS_FIELDS.some(f => (tips?.[f.key] || '').trim().length > 0);
+}
+
+function renderVenueAccessCard(venue) {
+  const wrap = document.getElementById('venue-access-card');
+  if (!wrap) return;
+  const tips = _accessTipsFromVenue(venue);
+  if (!_hasAnyAccessTip(tips)) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  const rows = _ACCESS_FIELDS
+    .filter(f => (tips[f.key] || '').trim())
+    .map(f => `
+      <div class="access-tip-row">
+        <div class="access-tip-icon">${f.icon}</div>
+        <div class="access-tip-body">
+          <div class="access-tip-label">${_escapeHtml(f.label)}</div>
+          <div class="access-tip-text">${_escapeHtml(tips[f.key].trim())}</div>
+        </div>
+      </div>`).join('');
+  wrap.innerHTML = `
+    <div class="access-card-header">
+      <h3>🚦 Getting to ${_escapeHtml(venue.name || 'the Venue')}</h3>
+    </div>
+    ${rows}
+  `;
+  wrap.style.display = 'block';
+}
+
+function renderVenueAccessEditor(venue) {
+  const wrap = document.getElementById('venue-access-edit');
+  if (!wrap) return;
+  if (!isAdmin()) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  const tips = _accessTipsFromVenue(venue);
+  const rows = _ACCESS_FIELDS.map(f => `
+    <div class="access-edit-row">
+      <div class="aer-icon">${f.icon}</div>
+      <div class="aer-field">
+        <label for="access-tip-${f.key}">${_escapeHtml(f.label)}</label>
+        <textarea id="access-tip-${f.key}" placeholder="${_escapeHtml(f.hint)}">${_escapeHtml(tips[f.key] || '')}</textarea>
+      </div>
+    </div>`).join('');
+  wrap.innerHTML = `
+    <div class="aec-title">👑 Admin · Getting-There Tips</div>
+    <div class="aec-sub">Visible to everyone on this venue page. Empty fields are hidden.</div>
+    ${rows}
+    <div class="access-edit-actions">
+      <button class="btn btn-grad" style="padding:9px 18px;font-size:13px" onclick="saveVenueAccessTips()">💾 Save Tips</button>
+      <button class="btn btn-outline" style="padding:9px 14px;font-size:13px" onclick="renderVenueAccessEditor(_currentVenueForAccess)">↺ Reset</button>
+    </div>
+  `;
+  wrap.style.display = 'block';
+}
+
+let _currentVenueForAccess = null;
+
+async function saveVenueAccessTips() {
+  if (!isAdmin() || !currentVenueId) return;
+  try {
+    const newTips = {};
+    _ACCESS_FIELDS.forEach(f => {
+      const v = (document.getElementById('access-tip-' + f.key)?.value || '').trim();
+      if (v) newTips[f.key] = v;
+    });
+
+    const _exRows = await _sbGet(`venues?id=eq.${encodeURIComponent(currentVenueId)}&select=admin_scoresheet&limit=1`);
+    const existing = Array.isArray(_exRows) ? _exRows[0] : null;
+    const merged = { ...(existing?.admin_scoresheet || {}), access_tips: Object.keys(newTips).length ? newTips : null };
+
+    const { error } = await _sbMutate('PATCH', `venues?id=eq.${encodeURIComponent(currentVenueId)}`, { admin_scoresheet: merged });
+    if (error) { showToast('Error saving tips: ' + error.message, 'error'); return; }
+    showToast('✅ Getting-there tips saved');
+    _venueCache = null;
+    // Re-render the public card with the merged data
+    _currentVenueForAccess = { ...(_currentVenueForAccess || {}), admin_scoresheet: merged };
+    renderVenueAccessCard(_currentVenueForAccess);
+  } catch(e) { showToast('Error saving tips: ' + e.message, 'error'); }
+}
+
 function _eatsCardHtml(p, venue) {
   const c = _eatsCTAs(p, venue);
   const meta = [p.cuisine, p.type].filter(Boolean).join(' · ').replace(/_/g,' ');
@@ -2400,6 +2515,11 @@ async function loadVenueDetail(venueId, venueName) {
     const _wcSlot = document.getElementById('venue-wc-badge-slot');
     if (_wcSlot) _wcSlot.innerHTML = isWorldCupVenue(venue) ? wcBadgeHtml('hero') : '';
     try { renderVenueWCGames(venue); } catch(e) { console.warn('renderVenueWCGames error:', e); }
+    try {
+      _currentVenueForAccess = venue;
+      renderVenueAccessCard(venue);
+      renderVenueAccessEditor(venue);
+    } catch(e) { console.warn('renderVenueAccess error:', e); }
     setEl('venue-detail-meta', [venue.city, venue.state].filter(Boolean).join(', '));
     setEl('vd-sport', venue.sport || '–');
     setEl('vd-team', venue.team || '–');
@@ -2647,6 +2767,8 @@ async function loadVenueBrowse() {
   _hide('venue-map-card');
   _hide('venue-eats-nearby');
   _hide('venue-wc-games');
+  _hide('venue-access-card');
+  _hide('venue-access-edit');
   // Destroy any active map instance so it doesn't linger
   if (_venueMapInstance) { try { _venueMapInstance.remove(); } catch(e) {} _venueMapInstance = null; }
   try {
