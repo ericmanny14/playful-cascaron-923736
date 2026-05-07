@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "141vennu",
+      "runtimeExecutable": "/usr/bin/ruby",
+      "runtimeArgs": [
+        "-run",
+        "-e",
+        "httpd",
+        "--",
+        "--port=8765",
+        "--bind-address=127.0.0.1",
+        "/Users/ericnaranjo/Documents/Venn stuff/141vennu"
+      ],
+      "port": 8765
+    }
+  ]
+}
