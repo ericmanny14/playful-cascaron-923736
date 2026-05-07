@@ -1450,150 +1450,151 @@ function wcBadgeHtml(variant) {
 
 // 2026 FIFA World Cup match schedule per host venue.
 // Source: FIFA Match Schedule v17, dated 10 April 2026 (post-draw).
-// All times Eastern Time (ET). Team matchups confirmed via the December
-// 2025 group-stage draw; knockout placeholders use FIFA's official
-// bracket notation (e.g. "1A" = Group A winner, "3CEFHI" = best 3rd-
-// placed team across groups C/E/F/H/I, "W83" = winner of Match 83).
+// All times Eastern Time (ET). 16 venues, 104 matches total. Knockout
+// placeholders use FIFA bracket notation: 1A = Group A winner,
+// 3CEFHI = best 3rd-placed team across those groups, W83 = winner of
+// match 83, L101 = loser of match 101.
 //
 // Schema per match: { date, matchNo, round, group?, home, away, timeET, note?, isFinal? }
 const _WC2026_SCHEDULE = {
   'estadio azteca': [
-    { date: '2026-06-11', matchNo: 1,   round: 'Group Stage', group: 'A', home: 'MEX',    away: 'RSA',    timeET: '15:00', note: '★ Tournament Opener' },
-    { date: '2026-06-18', matchNo: 28,  round: 'Group Stage', group: 'A', home: 'MEX',    away: 'KOR',    timeET: '21:00' },
-    { date: '2026-06-24', matchNo: 53,  round: 'Group Stage', group: 'A', home: 'CZE',    away: 'MEX',    timeET: '21:00' },
-    { date: '2026-06-28', matchNo: 79,  round: 'Round of 32',             home: '1A',     away: '3CEFHI', timeET: '21:00' },
-    { date: '2026-07-05', matchNo: 86,  round: 'Round of 16',             home: 'W74',    away: 'W77',    timeET: '17:00' }
+    { date:'2026-06-11', matchNo:1, round:'Group Stage', group:'A', home:'MEX', away:'RSA', timeET:'15:00', note:'★ Tournament Opener' },
+    { date:'2026-06-17', matchNo:24, round:'Group Stage', group:'K', home:'UZB', away:'COL', timeET:'22:00' },
+    { date:'2026-06-18', matchNo:28, round:'Group Stage', group:'A', home:'MEX', away:'KOR', timeET:'21:00' },
+    { date:'2026-06-26', matchNo:53, round:'Group Stage', group:'A', home:'CZE', away:'MEX', timeET:'21:00' },
+    { date:'2026-06-30', matchNo:79, round:'Round of 32', home:'1A', away:'3CEFHI', timeET:'21:00' },
   ],
   'estadio akron': [
-    { date: '2026-06-11', matchNo: 2,   round: 'Group Stage', group: 'A', home: 'KOR',    away: 'CZE',    timeET: '21:00' },
-    { date: '2026-06-18', matchNo: 25,  round: 'Group Stage', group: 'A', home: 'CZE',    away: 'RSA',    timeET: '12:00' },
-    { date: '2026-06-23', matchNo: 48,  round: 'Group Stage', group: 'K', home: 'COL',    away: 'COD',    timeET: '22:00' },
-    { date: '2026-06-26', matchNo: 54,  round: 'Group Stage', group: 'A', home: 'RSA',    away: 'KOR',    timeET: '21:00' }
+    { date:'2026-06-11', matchNo:2, round:'Group Stage', group:'A', home:'KOR', away:'CZE', timeET:'22:00' },
+    { date:'2026-06-18', matchNo:25, round:'Group Stage', group:'A', home:'CZE', away:'RSA', timeET:'12:00' },
+    { date:'2026-06-24', matchNo:48, round:'Group Stage', group:'K', home:'COL', away:'COD', timeET:'22:00' },
+    { date:'2026-06-26', matchNo:54, round:'Group Stage', group:'A', home:'RSA', away:'KOR', timeET:'21:00' },
   ],
   'estadio bbva': [
-    { date: '2026-06-14', matchNo: 12,  round: 'Group Stage', group: 'F', home: 'SWE',    away: 'TUN',    timeET: '22:00' },
-    { date: '2026-06-20', matchNo: 31,  round: 'Group Stage', group: 'D', home: 'PAR',    away: 'TUR',    timeET: '23:00' },
-    { date: '2026-06-25', matchNo: 55,  round: 'Group Stage', group: 'E', home: 'CUW',    away: 'CIV',    timeET: '16:00' },
-    { date: '2026-06-25', matchNo: 71,  round: 'Group Stage', group: 'K', home: 'COL',    away: 'POR',    timeET: '19:30' }
+    { date:'2026-06-14', matchNo:12, round:'Group Stage', group:'F', home:'SWE', away:'TUN', timeET:'22:00' },
+    { date:'2026-06-20', matchNo:31, round:'Group Stage', group:'D', home:'PAR', away:'TUR', timeET:'23:00' },
+    { date:'2026-06-25', matchNo:71, round:'Group Stage', group:'K', home:'COL', away:'POR', timeET:'19:30' },
+    { date:'2026-06-26', matchNo:55, round:'Group Stage', group:'E', home:'CUW', away:'CIV', timeET:'16:00' },
   ],
   'bmo field': [
-    { date: '2026-06-12', matchNo: 3,   round: 'Group Stage', group: 'B', home: 'CAN',    away: 'BIH',    timeET: '15:00', note: '★ Canada Opener' },
-    { date: '2026-06-17', matchNo: 21,  round: 'Group Stage', group: 'L', home: 'GHA',    away: 'PAN',    timeET: '19:00' },
-    { date: '2026-06-23', matchNo: 44,  round: 'Group Stage', group: 'J', home: 'JOR',    away: 'ALG',    timeET: '23:00' },
-    { date: '2026-06-26', matchNo: 58,  round: 'Group Stage', group: 'F', home: 'TUN',    away: 'NED',    timeET: '19:00' },
-    { date: '2026-06-27', matchNo: 70,  round: 'Group Stage', group: 'J', home: 'JOR',    away: 'ARG',    timeET: '22:00' },
-    { date: '2026-07-02', matchNo: 78,  round: 'Round of 32',             home: '2E',     away: '2I',     timeET: '13:00' }
+    { date:'2026-06-12', matchNo:3, round:'Group Stage', group:'B', home:'CAN', away:'BIH', timeET:'15:00', note:'★ Canada Opener' },
+    { date:'2026-06-17', matchNo:21, round:'Group Stage', group:'L', home:'GHA', away:'PAN', timeET:'19:00' },
+    { date:'2026-06-23', matchNo:44, round:'Group Stage', group:'J', home:'JOR', away:'ALG', timeET:'23:00' },
+    { date:'2026-06-26', matchNo:58, round:'Group Stage', group:'F', home:'TUN', away:'NED', timeET:'19:00' },
+    { date:'2026-06-27', matchNo:70, round:'Group Stage', group:'J', home:'JOR', away:'ARG', timeET:'22:00' },
+    { date:'2026-06-30', matchNo:78, round:'Round of 32', home:'2E', away:'2I', timeET:'13:00' },
   ],
   'bc place': [
-    { date: '2026-06-12', matchNo: 6,   round: 'Group Stage', group: 'D', home: 'AUS',    away: 'TUR',    timeET: '22:00' },
-    { date: '2026-06-13', matchNo: 8,   round: 'Group Stage', group: 'B', home: 'QAT',    away: 'SUI',    timeET: '15:00' },
-    { date: '2026-06-17', matchNo: 26,  round: 'Group Stage', group: 'B', home: 'SUI',    away: 'BIH',    timeET: '15:00' },
-    { date: '2026-06-21', matchNo: 38,  round: 'Group Stage', group: 'H', home: 'ESP',    away: 'KSA',    timeET: '12:00' },
-    { date: '2026-06-25', matchNo: 51,  round: 'Group Stage', group: 'B', home: 'SUI',    away: 'CAN',    timeET: '15:00' },
-    { date: '2026-06-26', matchNo: 64,  round: 'Group Stage', group: 'G', home: 'NZL',    away: 'BEL',    timeET: '23:00' },
-    { date: '2026-07-02', matchNo: 80,  round: 'Round of 32',             home: '1L',     away: '3EHIJK', timeET: '12:00' }
+    { date:'2026-06-12', matchNo:6, round:'Group Stage', group:'D', home:'AUS', away:'TUR', timeET:'22:00' },
+    { date:'2026-06-13', matchNo:8, round:'Group Stage', group:'B', home:'QAT', away:'SUI', timeET:'15:00' },
+    { date:'2026-06-18', matchNo:26, round:'Group Stage', group:'B', home:'SUI', away:'BIH', timeET:'15:00' },
+    { date:'2026-06-25', matchNo:51, round:'Group Stage', group:'B', home:'SUI', away:'CAN', timeET:'15:00' },
+    { date:'2026-06-27', matchNo:64, round:'Group Stage', group:'G', home:'NZL', away:'BEL', timeET:'23:00' },
+    { date:'2026-07-02', matchNo:85, round:'Round of 32', home:'1B', away:'3EFGIJ', timeET:'23:00' },
+    { date:'2026-07-06', matchNo:91, round:'Round of 16', home:'W76', away:'W78', timeET:'16:00' },
   ],
   'sofi stadium': [
-    { date: '2026-06-12', matchNo: 4,   round: 'Group Stage', group: 'D', home: 'USA',    away: 'PAR',    timeET: '21:00' },
-    { date: '2026-06-15', matchNo: 15,  round: 'Group Stage', group: 'G', home: 'IRN',    away: 'NZL',    timeET: '21:00' },
-    { date: '2026-06-18', matchNo: 27,  round: 'Group Stage', group: 'B', home: 'CAN',    away: 'QAT',    timeET: '18:00' },
-    { date: '2026-06-22', matchNo: 39,  round: 'Group Stage', group: 'G', home: 'BEL',    away: 'IRN',    timeET: '15:00' },
-    { date: '2026-06-25', matchNo: 59,  round: 'Group Stage', group: 'D', home: 'TUR',    away: 'USA',    timeET: '22:00' },
-    { date: '2026-06-28', matchNo: 73,  round: 'Round of 32',             home: '2A',     away: '2B',     timeET: '15:00' },
-    { date: '2026-06-29', matchNo: 81,  round: 'Round of 32',             home: '1D',     away: '3BEFIJ', timeET: '20:00' },
-    { date: '2026-07-08', matchNo: 96,  round: 'Round of 16',             home: 'W85',    away: 'W87',    timeET: '16:00' }
+    { date:'2026-06-12', matchNo:4, round:'Group Stage', group:'D', home:'USA', away:'PAR', timeET:'21:00', note:'★ USA Opener' },
+    { date:'2026-06-15', matchNo:15, round:'Group Stage', group:'G', home:'IRN', away:'NZL', timeET:'21:00' },
+    { date:'2026-06-18', matchNo:27, round:'Group Stage', group:'B', home:'CAN', away:'QAT', timeET:'18:00' },
+    { date:'2026-06-22', matchNo:38, round:'Group Stage', group:'H', home:'ESP', away:'KSA', timeET:'12:00' },
+    { date:'2026-06-26', matchNo:59, round:'Group Stage', group:'D', home:'TUR', away:'USA', timeET:'22:00' },
+    { date:'2026-06-27', matchNo:63, round:'Group Stage', group:'G', home:'EGY', away:'IRN', timeET:'23:00' },
+    { date:'2026-06-28', matchNo:73, round:'Round of 32', home:'2A', away:'2B', timeET:'15:00' },
+    { date:'2026-07-08', matchNo:96, round:'Round of 16', home:'W85', away:'W87', timeET:'16:00' },
   ],
-  "levi's stadium": [
-    { date: '2026-06-13', matchNo: 9,   round: 'Group Stage', group: 'E', home: 'CIV',    away: 'ECU',    timeET: '19:00' },
-    { date: '2026-06-17', matchNo: 20,  round: 'Group Stage', group: 'J', home: 'AUT',    away: 'JOR',    timeET: '00:00' },
-    { date: '2026-06-21', matchNo: 36,  round: 'Group Stage', group: 'F', home: 'TUN',    away: 'JPN',    timeET: '00:00' },
-    { date: '2026-06-24', matchNo: 47,  round: 'Group Stage', group: 'K', home: 'POR',    away: 'UZB',    timeET: '13:00' },
-    { date: '2026-06-26', matchNo: 66,  round: 'Group Stage', group: 'H', home: 'URU',    away: 'ESP',    timeET: '20:00' },
-    { date: '2026-07-01', matchNo: 74,  round: 'Round of 32',             home: '1E',     away: '3ABCDF', timeET: '16:30' }
+  'levi\'s stadium': [
+    { date:'2026-06-17', matchNo:20, round:'Group Stage', group:'J', home:'AUT', away:'JOR', timeET:'00:00' },
+    { date:'2026-06-22', matchNo:36, round:'Group Stage', group:'F', home:'TUN', away:'JPN', timeET:'00:00' },
+    { date:'2026-06-24', matchNo:47, round:'Group Stage', group:'K', home:'POR', away:'UZB', timeET:'13:00' },
+    { date:'2026-06-27', matchNo:66, round:'Group Stage', group:'H', home:'URU', away:'ESP', timeET:'20:00' },
+    { date:'2026-06-28', matchNo:74, round:'Round of 32', home:'1E', away:'3ABCDF', timeET:'16:30' },
+    { date:'2026-07-01', matchNo:81, round:'Round of 32', home:'1D', away:'3BEFIJ', timeET:'20:00' },
   ],
   'lumen field': [
-    { date: '2026-06-15', matchNo: 16,  round: 'Group Stage', group: 'G', home: 'BEL',    away: 'EGY',    timeET: '15:00' },
-    { date: '2026-06-20', matchNo: 32,  round: 'Group Stage', group: 'D', home: 'USA',    away: 'AUS',    timeET: '15:00' },
-    { date: '2026-06-22', matchNo: 40,  round: 'Group Stage', group: 'G', home: 'NZL',    away: 'EGY',    timeET: '21:00' },
-    { date: '2026-06-25', matchNo: 56,  round: 'Group Stage', group: 'E', home: 'ECU',    away: 'GER',    timeET: '16:00' },
-    { date: '2026-07-01', matchNo: 76,  round: 'Round of 32',             home: '1C',     away: '2F',     timeET: '13:00' },
-    { date: '2026-07-06', matchNo: 91,  round: 'Round of 16',             home: 'W76',    away: 'W78',    timeET: '16:00' }
+    { date:'2026-06-15', matchNo:16, round:'Group Stage', group:'G', home:'BEL', away:'EGY', timeET:'15:00' },
+    { date:'2026-06-20', matchNo:32, round:'Group Stage', group:'D', home:'USA', away:'AUS', timeET:'15:00' },
+    { date:'2026-06-22', matchNo:40, round:'Group Stage', group:'G', home:'NZL', away:'EGY', timeET:'21:00' },
+    { date:'2026-06-26', matchNo:56, round:'Group Stage', group:'E', home:'ECU', away:'GER', timeET:'16:00' },
+    { date:'2026-06-29', matchNo:76, round:'Round of 32', home:'1C', away:'2F', timeET:'13:00' },
+    { date:'2026-07-06', matchNo:92, round:'Round of 16', home:'W79', away:'W80', timeET:'20:00' },
   ],
   'arrowhead stadium': [
-    { date: '2026-06-16', matchNo: 19,  round: 'Group Stage', group: 'J', home: 'ARG',    away: 'ALG',    timeET: '21:00' },
-    { date: '2026-06-19', matchNo: 30,  round: 'Group Stage', group: 'C', home: 'SCO',    away: 'MAR',    timeET: '18:00' },
-    { date: '2026-06-23', matchNo: 43,  round: 'Group Stage', group: 'J', home: 'ARG',    away: 'AUT',    timeET: '13:00' },
-    { date: '2026-06-26', matchNo: 57,  round: 'Group Stage', group: 'F', home: 'JPN',    away: 'SWE',    timeET: '19:00' },
-    { date: '2026-06-27', matchNo: 69,  round: 'Group Stage', group: 'J', home: 'ALG',    away: 'AUT',    timeET: '22:00' },
-    { date: '2026-07-10', matchNo: 99,  round: 'Quarterfinal',            home: 'W91',    away: 'W92',    timeET: '17:00' }
+    { date:'2026-06-16', matchNo:19, round:'Group Stage', group:'J', home:'ARG', away:'ALG', timeET:'21:00' },
+    { date:'2026-06-19', matchNo:30, round:'Group Stage', group:'C', home:'SCO', away:'MAR', timeET:'18:00' },
+    { date:'2026-06-23', matchNo:43, round:'Group Stage', group:'J', home:'ARG', away:'AUT', timeET:'13:00' },
+    { date:'2026-06-26', matchNo:57, round:'Group Stage', group:'F', home:'JPN', away:'SWE', timeET:'19:00' },
+    { date:'2026-06-27', matchNo:69, round:'Group Stage', group:'J', home:'ALG', away:'AUT', timeET:'22:00' },
+    { date:'2026-07-10', matchNo:99, round:'Quarterfinal', home:'W91', away:'W92', timeET:'17:00' },
   ],
   'nrg stadium': [
-    { date: '2026-06-14', matchNo: 10,  round: 'Group Stage', group: 'E', home: 'GER',    away: 'CUW',    timeET: '13:00' },
-    { date: '2026-06-17', matchNo: 23,  round: 'Group Stage', group: 'K', home: 'POR',    away: 'COD',    timeET: '13:00' },
-    { date: '2026-06-21', matchNo: 35,  round: 'Group Stage', group: 'F', home: 'NED',    away: 'SWE',    timeET: '13:00' },
-    { date: '2026-06-24', matchNo: 50,  round: 'Group Stage', group: 'C', home: 'MAR',    away: 'HAI',    timeET: '18:00' },
-    { date: '2026-06-26', matchNo: 65,  round: 'Group Stage', group: 'H', home: 'CPV',    away: 'KSA',    timeET: '20:00' },
-    { date: '2026-06-29', matchNo: 75,  round: 'Round of 32',             home: '1F',     away: '2C',     timeET: '21:00' }
+    { date:'2026-06-14', matchNo:10, round:'Group Stage', group:'E', home:'GER', away:'CUW', timeET:'13:00' },
+    { date:'2026-06-17', matchNo:23, round:'Group Stage', group:'K', home:'POR', away:'COD', timeET:'13:00' },
+    { date:'2026-06-21', matchNo:35, round:'Group Stage', group:'F', home:'NED', away:'SWE', timeET:'13:00' },
+    { date:'2026-06-25', matchNo:50, round:'Group Stage', group:'C', home:'MAR', away:'HAI', timeET:'18:00' },
+    { date:'2026-06-27', matchNo:65, round:'Group Stage', group:'H', home:'CPV', away:'KSA', timeET:'20:00' },
+    { date:'2026-06-29', matchNo:75, round:'Round of 32', home:'1F', away:'2C', timeET:'21:00' },
   ],
   'at&t stadium': [
-    { date: '2026-06-14', matchNo: 11,  round: 'Group Stage', group: 'F', home: 'NED',    away: 'JPN',    timeET: '16:00' },
-    { date: '2026-06-17', matchNo: 22,  round: 'Group Stage', group: 'L', home: 'ENG',    away: 'CRO',    timeET: '16:00' },
-    { date: '2026-06-19', matchNo: 29,  round: 'Group Stage', group: 'C', home: 'BRA',    away: 'HAI',    timeET: '20:30' },
-    { date: '2026-06-22', matchNo: 36,  round: 'Group Stage', group: 'F', home: 'TUN',    away: 'JPN',    timeET: '00:00' },
-    { date: '2026-06-25', matchNo: 49,  round: 'Group Stage', group: 'C', home: 'SCO',    away: 'BRA',    timeET: '18:00' },
-    { date: '2026-06-29', matchNo: 84,  round: 'Round of 32',             home: '1H',     away: '2J',     timeET: '15:00' },
-    { date: '2026-07-04', matchNo: 88,  round: 'Round of 16',             home: '2D',     away: '2G',     timeET: '14:00' },
-    { date: '2026-07-11', matchNo: 98,  round: 'Quarterfinal',            home: 'W93',    away: 'W94',    timeET: '15:00' },
-    { date: '2026-07-15', matchNo: 102, round: 'Semifinal',               home: 'W99',    away: 'W100',   timeET: '15:00' }
+    { date:'2026-06-14', matchNo:11, round:'Group Stage', group:'F', home:'NED', away:'JPN', timeET:'16:00' },
+    { date:'2026-06-17', matchNo:22, round:'Group Stage', group:'L', home:'ENG', away:'CRO', timeET:'16:00' },
+    { date:'2026-06-19', matchNo:29, round:'Group Stage', group:'C', home:'BRA', away:'HAI', timeET:'20:30' },
+    { date:'2026-06-25', matchNo:49, round:'Group Stage', group:'C', home:'SCO', away:'BRA', timeET:'18:00' },
+    { date:'2026-07-02', matchNo:84, round:'Round of 32', home:'1H', away:'2J', timeET:'15:00' },
+    { date:'2026-07-03', matchNo:88, round:'Round of 32', home:'2D', away:'2G', timeET:'14:00' },
+    { date:'2026-07-07', matchNo:93, round:'Round of 16', home:'W83', away:'W84', timeET:'15:00' },
+    { date:'2026-07-11', matchNo:98, round:'Quarterfinal', home:'W93', away:'W94', timeET:'15:00' },
+    { date:'2026-07-15', matchNo:102, round:'Semifinal', home:'W99', away:'W100', timeET:'15:00' },
   ],
   'mercedes-benz stadium': [
-    { date: '2026-06-15', matchNo: 14,  round: 'Group Stage', group: 'H', home: 'ESP',    away: 'CPV',    timeET: '12:00' },
-    { date: '2026-06-18', matchNo: 25,  round: 'Group Stage', group: 'A', home: 'CZE',    away: 'RSA',    timeET: '12:00' },
-    { date: '2026-06-21', matchNo: 33,  round: 'Group Stage', group: 'E', home: 'GER',    away: 'CIV',    timeET: '16:00' },
-    { date: '2026-06-24', matchNo: 45,  round: 'Group Stage', group: 'L', home: 'ENG',    away: 'GHA',    timeET: '16:00' },
-    { date: '2026-06-26', matchNo: 61,  round: 'Group Stage', group: 'I', home: 'NOR',    away: 'FRA',    timeET: '15:00' },
-    { date: '2026-07-01', matchNo: 77,  round: 'Round of 32',             home: '1I',     away: '3CDFGH', timeET: '17:00' },
-    { date: '2026-07-07', matchNo: 92,  round: 'Round of 16',             home: 'W79',    away: 'W80',    timeET: '20:00' },
-    { date: '2026-07-15', matchNo: 101, round: 'Semifinal',               home: 'W97',    away: 'W98',    timeET: '15:00' }
+    { date:'2026-06-15', matchNo:14, round:'Group Stage', group:'H', home:'ESP', away:'CPV', timeET:'12:00' },
+    { date:'2026-06-21', matchNo:33, round:'Group Stage', group:'E', home:'GER', away:'CIV', timeET:'16:00' },
+    { date:'2026-06-24', matchNo:45, round:'Group Stage', group:'L', home:'ENG', away:'GHA', timeET:'16:00' },
+    { date:'2026-06-27', matchNo:61, round:'Group Stage', group:'I', home:'NOR', away:'FRA', timeET:'15:00' },
+    { date:'2026-06-29', matchNo:77, round:'Round of 32', home:'1I', away:'3CDFGH', timeET:'17:00' },
+    { date:'2026-07-03', matchNo:86, round:'Round of 32', home:'1J', away:'2H', timeET:'18:00' },
+    { date:'2026-07-07', matchNo:94, round:'Round of 16', home:'W81', away:'W82', timeET:'20:00' },
+    { date:'2026-07-14', matchNo:101, round:'Semifinal', home:'W97', away:'W98', timeET:'15:00' },
   ],
   'lincoln financial field': [
-    { date: '2026-06-13', matchNo: 9,   round: 'Group Stage', group: 'E', home: 'CIV',    away: 'ECU',    timeET: '19:00' },
-    { date: '2026-06-19', matchNo: 29,  round: 'Group Stage', group: 'C', home: 'BRA',    away: 'HAI',    timeET: '20:30' },
-    { date: '2026-06-23', matchNo: 42,  round: 'Group Stage', group: 'I', home: 'FRA',    away: 'IRQ',    timeET: '17:00' },
-    { date: '2026-06-25', matchNo: 52,  round: 'Group Stage', group: 'B', home: 'BIH',    away: 'QAT',    timeET: '15:00' },
-    { date: '2026-06-26', matchNo: 68,  round: 'Group Stage', group: 'L', home: 'CRO',    away: 'GHA',    timeET: '17:00' },
-    { date: '2026-07-04', matchNo: 85,  round: 'Round of 32',             home: '1B',     away: '3EFGIJ', timeET: '23:00' }
+    { date:'2026-06-13', matchNo:9, round:'Group Stage', group:'E', home:'CIV', away:'ECU', timeET:'19:00' },
+    { date:'2026-06-23', matchNo:42, round:'Group Stage', group:'I', home:'FRA', away:'IRQ', timeET:'17:00' },
+    { date:'2026-06-25', matchNo:52, round:'Group Stage', group:'B', home:'BIH', away:'QAT', timeET:'15:00' },
+    { date:'2026-06-27', matchNo:68, round:'Group Stage', group:'L', home:'CRO', away:'GHA', timeET:'17:00' },
+    { date:'2026-07-01', matchNo:80, round:'Round of 32', home:'1L', away:'3EHIJK', timeET:'12:00' },
+    { date:'2026-07-08', matchNo:95, round:'Round of 16', home:'W86', away:'W88', timeET:'12:00' },
   ],
   'gillette stadium': [
-    { date: '2026-06-12', matchNo: 5,   round: 'Group Stage', group: 'C', home: 'HAI',    away: 'SCO',    timeET: '21:00' },
-    { date: '2026-06-16', matchNo: 18,  round: 'Group Stage', group: 'I', home: 'IRQ',    away: 'NOR',    timeET: '18:00' },
-    { date: '2026-06-19', matchNo: 30,  round: 'Group Stage', group: 'C', home: 'SCO',    away: 'MAR',    timeET: '18:00' },
-    { date: '2026-06-23', matchNo: 41,  round: 'Group Stage', group: 'I', home: 'NOR',    away: 'SEN',    timeET: '20:00' },
-    { date: '2026-06-26', matchNo: 62,  round: 'Group Stage', group: 'I', home: 'SEN',    away: 'IRQ',    timeET: '15:00' },
-    { date: '2026-06-29', matchNo: 87,  round: 'Round of 32',             home: '1K',     away: '3DEIJL', timeET: '21:30' },
-    { date: '2026-07-09', matchNo: 95,  round: 'Quarterfinal',            home: 'W89',    away: 'W90',    timeET: '12:00' }
+    { date:'2026-06-12', matchNo:5, round:'Group Stage', group:'C', home:'HAI', away:'SCO', timeET:'21:00' },
+    { date:'2026-06-16', matchNo:18, round:'Group Stage', group:'I', home:'IRQ', away:'NOR', timeET:'18:00' },
+    { date:'2026-06-23', matchNo:41, round:'Group Stage', group:'I', home:'NOR', away:'SEN', timeET:'20:00' },
+    { date:'2026-06-27', matchNo:62, round:'Group Stage', group:'I', home:'SEN', away:'IRQ', timeET:'15:00' },
+    { date:'2026-06-27', matchNo:67, round:'Group Stage', group:'L', home:'PAN', away:'ENG', timeET:'17:00' },
+    { date:'2026-07-03', matchNo:87, round:'Round of 32', home:'1K', away:'3DEIJL', timeET:'21:30' },
+    { date:'2026-07-11', matchNo:100, round:'Quarterfinal', home:'W95', away:'W96', timeET:'21:00' },
   ],
   'hard rock stadium': [
-    { date: '2026-06-15', matchNo: 13,  round: 'Group Stage', group: 'H', home: 'KSA',    away: 'URU',    timeET: '18:00' },
-    { date: '2026-06-21', matchNo: 34,  round: 'Group Stage', group: 'E', home: 'ECU',    away: 'CUW',    timeET: '20:00' },
-    { date: '2026-06-22', matchNo: 37,  round: 'Group Stage', group: 'H', home: 'URU',    away: 'CPV',    timeET: '18:00' },
-    { date: '2026-06-24', matchNo: 46,  round: 'Group Stage', group: 'L', home: 'PAN',    away: 'CRO',    timeET: '19:00' },
-    { date: '2026-06-26', matchNo: 60,  round: 'Group Stage', group: 'D', home: 'PAR',    away: 'AUS',    timeET: '22:00' },
-    { date: '2026-07-03', matchNo: 72,  round: 'Round of 32',             home: '1G',     away: '3AEHIJ', timeET: '19:30' },
-    { date: '2026-07-06', matchNo: 90,  round: 'Round of 16',             home: 'W73',    away: 'W75',    timeET: '13:00' },
-    { date: '2026-07-18', matchNo: 103, round: 'Third-Place Playoff',     home: 'L101',   away: 'L102',   timeET: '17:00', note: '🥉 Bronze Medal Match' }
+    { date:'2026-06-15', matchNo:13, round:'Group Stage', group:'H', home:'KSA', away:'URU', timeET:'18:00' },
+    { date:'2026-06-21', matchNo:34, round:'Group Stage', group:'E', home:'ECU', away:'CUW', timeET:'20:00' },
+    { date:'2026-06-22', matchNo:37, round:'Group Stage', group:'H', home:'URU', away:'CPV', timeET:'18:00' },
+    { date:'2026-06-24', matchNo:46, round:'Group Stage', group:'L', home:'PAN', away:'CRO', timeET:'19:00' },
+    { date:'2026-06-25', matchNo:72, round:'Group Stage', group:'K', home:'COD', away:'UZB', timeET:'19:30' },
+    { date:'2026-06-26', matchNo:60, round:'Group Stage', group:'D', home:'PAR', away:'AUS', timeET:'22:00' },
+    { date:'2026-07-05', matchNo:90, round:'Round of 16', home:'W73', away:'W75', timeET:'13:00' },
+    { date:'2026-07-18', matchNo:103, round:'Third-Place Playoff', home:'L101', away:'L102', timeET:'17:00', note:'🥉 Bronze Medal Match' },
   ],
   'metlife stadium': [
-    { date: '2026-06-13', matchNo: 7,   round: 'Group Stage', group: 'C', home: 'BRA',    away: 'MAR',    timeET: '18:00' },
-    { date: '2026-06-16', matchNo: 17,  round: 'Group Stage', group: 'I', home: 'FRA',    away: 'SEN',    timeET: '15:00' },
-    { date: '2026-06-22', matchNo: 39,  round: 'Group Stage', group: 'G', home: 'BEL',    away: 'IRN',    timeET: '15:00' },
-    { date: '2026-06-25', matchNo: 54,  round: 'Group Stage', group: 'A', home: 'RSA',    away: 'KOR',    timeET: '21:00' },
-    { date: '2026-06-30', matchNo: 82,  round: 'Round of 32',             home: '1G',     away: '3AEHIJ', timeET: '16:00' },
-    { date: '2026-07-05', matchNo: 89,  round: 'Round of 16',             home: 'W74',    away: 'W77',    timeET: '17:00' },
-    { date: '2026-07-08', matchNo: 94,  round: 'Quarterfinal',            home: 'W81',    away: 'W82',    timeET: '20:00' },
-    { date: '2026-07-19', matchNo: 104, round: 'FINAL',                   home: 'W101',   away: 'W102',   timeET: '15:00', isFinal: true, note: '🏆 FIFA World Cup Final' }
-  ]
+    { date:'2026-06-13', matchNo:7, round:'Group Stage', group:'C', home:'BRA', away:'MAR', timeET:'18:00' },
+    { date:'2026-06-16', matchNo:17, round:'Group Stage', group:'I', home:'FRA', away:'SEN', timeET:'15:00' },
+    { date:'2026-06-22', matchNo:39, round:'Group Stage', group:'G', home:'BEL', away:'IRN', timeET:'15:00' },
+    { date:'2026-07-01', matchNo:82, round:'Round of 32', home:'1G', away:'3AEHIJ', timeET:'16:00' },
+    { date:'2026-07-02', matchNo:83, round:'Round of 32', home:'2K', away:'2L', timeET:'19:00' },
+    { date:'2026-07-04', matchNo:89, round:'Round of 16', home:'W74', away:'W77', timeET:'17:00' },
+    { date:'2026-07-09', matchNo:97, round:'Quarterfinal', home:'W89', away:'W90', timeET:'16:00' },
+    { date:'2026-07-19', matchNo:104, round:'FINAL', home:'W101', away:'W102', timeET:'15:00', note:'🏆 FIFA World Cup Final', isFinal:true },
+  ],
 };
+
 
 function _wcVenueKey(venue) {
   const n = (venue?.name || '').toLowerCase().trim();
