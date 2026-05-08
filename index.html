@@ -1935,6 +1935,14 @@ const _PROFILE_COST = [
   { key:2, label:'$$',  hint:'Mid' },
   { key:3, label:'$$$', hint:'Premium' }
 ];
+const _PROFILE_MOBILITY = [
+  { key:'car',     icon:'🚗', label:'Rental car needed', short:'Car needed',
+    hint:'Sprawl, multiple drives expected — plan for parking + a rental.' },
+  { key:'rideshare', icon:'🚕', label:'Uber / transit friendly', short:'Uber-friendly',
+    hint:'No car needed, but expect ride-share or transit costs across the trip.' },
+  { key:'walk',    icon:'🚶', label:'Fully walkable', short:'Walkable',
+    hint:'Walking + transit handles the whole trip — no rental car required.' }
+];
 
 function _venueProfile(venue) {
   return venue?.admin_scoresheet?.profile || {};
@@ -1948,7 +1956,7 @@ function renderVenueProfileCard(venue) {
     || p.cost_tier || p.climate
     || (Array.isArray(p.vibe) && p.vibe.length)
     || (Array.isArray(p.food) && p.food.length)
-    || p.walkability;
+    || p.mobility || p.rec_stay_nights;
   if (!hasAny) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
 
   const pills = [];
@@ -1960,8 +1968,14 @@ function renderVenueProfileCard(venue) {
     const c = _PROFILE_CLIMATE.find(x => x.key === p.climate);
     if (c) pills.push(`<span class="p-pill climate">🌡 ${_escapeHtml(c.label)}</span>`);
   }
-  if (p.walkability) pills.push(`<span class="p-pill" title="Walkability score">🚶 Walkable ${p.walkability}/5</span>`);
+  if (p.mobility) {
+    const m = _PROFILE_MOBILITY.find(x => x.key === p.mobility);
+    if (m) pills.push(`<span class="p-pill" title="${_escapeHtml(m.hint)}">${m.icon} ${_escapeHtml(m.short)}</span>`);
+  }
   if (p.rec_stay_nights) pills.push(`<span class="p-pill">🛏 ${p.rec_stay_nights}-night trip</span>`);
+  // 141 quality pill — tiebreaker signal alongside profile pills
+  const _141 = parseFloat(venue?.admin_scoresheet?.total_score);
+  if (!isNaN(_141)) pills.push(`<span class="p-pill" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.35);color:#f59e0b" title="Official 141 venn-U score">⭐ 141 ${_141.toFixed(1)}</span>`);
   (Array.isArray(p.vibe) ? p.vibe : []).forEach(k => {
     const v = _PROFILE_VIBE.find(x => x.key === k);
     if (v) pills.push(`<span class="p-pill vibe">${_escapeHtml(v.label)}</span>`);
@@ -2022,15 +2036,15 @@ function renderVenueProfileEditor(venue) {
       <div class="pec-chip-row">${chipRow('food', _PROFILE_FOOD, foodSet)}</div>
     </div>
 
-    <div class="pec-row" style="display:flex;gap:14px">
-      <div style="flex:1">
-        <label for="pec-walk">Walkability (1-5)</label>
-        <input id="pec-walk" type="number" min="1" max="5" step="1" value="${p.walkability || ''}" placeholder="1=car-only, 5=fully walkable">
-      </div>
-      <div style="flex:1">
-        <label for="pec-nights">Recommended trip length (nights)</label>
-        <input id="pec-nights" type="number" min="1" max="14" step="1" value="${p.rec_stay_nights || ''}" placeholder="e.g. 4">
-      </div>
+    <div class="pec-row">
+      <label>Getting around the trip</label>
+      <div class="pec-chip-row">${chipRow('mobility', _PROFILE_MOBILITY.map(m => ({ key: m.key, label: m.icon + ' ' + m.label })), p.mobility || '', true)}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;font-style:italic">How fans get around the whole trip — not just the stadium.</div>
+    </div>
+
+    <div class="pec-row">
+      <label for="pec-nights">Recommended trip length (nights)</label>
+      <input id="pec-nights" type="number" min="1" max="14" step="1" value="${p.rec_stay_nights || ''}" placeholder="e.g. 4" style="max-width:160px">
     </div>
 
     <div class="pec-actions">
@@ -2071,9 +2085,11 @@ async function saveVenueProfile() {
     const foodKeys = Array.from(document.querySelectorAll('.pec-chip.active[data-group="food"]:not(.single)')).map(c => c.getAttribute('data-key'));
     if (foodKeys.length) profile.food = foodKeys;
 
-    // Numeric inputs
-    const walk = parseInt(document.getElementById('pec-walk')?.value, 10);
-    if (!isNaN(walk) && walk >= 1 && walk <= 5) profile.walkability = walk;
+    // Mobility (single-select chips)
+    const mobilityEl = document.querySelector('.pec-chip.single.active[data-group="mobility"]');
+    if (mobilityEl) profile.mobility = mobilityEl.getAttribute('data-key');
+
+    // Numeric input
     const nights = parseInt(document.getElementById('pec-nights')?.value, 10);
     if (!isNaN(nights) && nights >= 1) profile.rec_stay_nights = nights;
 
