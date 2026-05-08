@@ -3564,20 +3564,28 @@ async function loadStats() {
     // Venue count is always real — shows site depth
     setS('stat-venues', vCount || 0);
     setS('stat-states', uniqueStates || 0);
-    // For reviews/members: show qualitative label when small to avoid exposing early-stage numbers
-    if ((rCount || 0) >= 50) {
+    // Helper: hide the whole tile when the metric isn't yet a credible
+    // social-proof signal. Empty counts actively hurt trust on a new site.
+    const tileFor = id => document.getElementById(id)?.closest('.stat-item');
+    const showTile = (id, on) => { const t = tileFor(id); if (t) t.style.display = on ? '' : 'none'; };
+
+    const REVIEW_THRESHOLD = 20;
+    const MEMBER_THRESHOLD = 50;
+
+    if ((rCount || 0) >= REVIEW_THRESHOLD) {
       setS('stat-reviews', rCount);
       setS('stat-l-reviews', 'Reviews');
+      showTile('stat-reviews', true);
     } else {
-      setS('stat-reviews', 'Growing');
-      setS('stat-l-reviews', 'Review Community');
+      showTile('stat-reviews', false);
     }
-    if ((mCount || 0) >= 50) {
+
+    if ((mCount || 0) >= MEMBER_THRESHOLD) {
       setS('stat-members', mCount);
       setS('stat-l-members', 'Members');
+      showTile('stat-members', true);
     } else {
-      setS('stat-members', 'Early Access');
-      setS('stat-l-members', 'Be Among the First');
+      showTile('stat-members', false);
     }
   } catch(e) { console.error('loadStats error:', e); }
 }
