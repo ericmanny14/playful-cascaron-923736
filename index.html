@@ -387,6 +387,16 @@ nav ul a:hover{color:var(--ink)}
 .pec-chip.active{background:rgba(245,158,11,.15);border-color:rgba(245,158,11,.5);color:#f59e0b}
 .pec-chip.single.active{background:rgba(30,127,212,.15);border-color:rgba(30,127,212,.5);color:var(--blue-light)}
 .pec-actions{display:flex;gap:10px;margin-top:14px}
+/* ── VENUE PAGE TABS ── */
+.venue-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:0;scrollbar-width:none}
+.venue-tabs::-webkit-scrollbar{display:none}
+.vt-btn{flex-shrink:0;background:none;border:none;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;padding:12px 16px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;margin-bottom:-1px;white-space:nowrap}
+.vt-btn:hover{color:var(--ink)}
+.vt-btn.active{color:var(--blue-light);border-bottom-color:var(--blue-light)}
+.venue-tab-pane[hidden]{display:none}
+.venue-tab-empty{background:var(--bg2);border:1px dashed var(--border);border-radius:12px;padding:40px 24px;text-align:center;color:var(--muted)}
+.venue-tab-empty h4{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;text-transform:uppercase;color:var(--ink);margin:0 0 6px}
+.venue-tab-empty p{font-size:13px;color:var(--muted);margin:0;max-width:340px;margin-left:auto;margin-right:auto;line-height:1.5}
 /* ── WORLD CUP GAMES SIDEBAR CARD ── */
 .wc-games-card{background:linear-gradient(180deg,rgba(245,158,11,.06),var(--bg2) 70%);border:1px solid rgba(245,158,11,.35);border-radius:12px;padding:16px 16px 14px;margin-bottom:16px;position:relative;overflow:hidden}
 .wc-games-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#16a34a,#1e7fd4,#f59e0b)}
@@ -897,53 +907,83 @@ nav ul a:hover{color:var(--ink)}
   </div>
   <div class="venue-body">
     <div>
-      <!-- ADMIN SCORESHEET DISPLAY — shown to all when filled in -->
-      <div id="admin-scoresheet-display" style="display:none"></div>
+      <!-- TAB NAV -->
+      <div class="venue-tabs" id="venue-tabs">
+        <button class="vt-btn active" data-tab="overview" onclick="setVenueTab('overview')">📊 Overview</button>
+        <button class="vt-btn" data-tab="review" onclick="setVenueTab('review')">⭐ The 141 Review</button>
+        <button class="vt-btn" data-tab="trip" onclick="setVenueTab('trip')">🚦 Plan Your Trip</button>
+        <button class="vt-btn" data-tab="eats" onclick="setVenueTab('eats')">🍽 Eats</button>
+        <button class="vt-btn" data-tab="reviews" onclick="setVenueTab('reviews')">💬 Reviews</button>
+      </div>
 
-      <!-- Admin quick-link — edit this venue's official review in the admin panel -->
-      <div id="admin-scoresheet-editor" style="display:none">
-        <div class="admin-panel" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
-          <div class="admin-panel-title" style="margin-bottom:0">👑 Official 141 Review</div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-grad" style="padding:8px 16px;font-size:13px" onclick="openAdminDashEditVenue()">✏️ Edit in Admin Panel</button>
-            <button class="btn btn-outline" style="padding:8px 14px;font-size:12px;color:var(--dislike);border-color:var(--dislike)" onclick="admDeleteVenue(currentVenueId)">🗑 Delete</button>
+      <!-- OVERVIEW TAB — snapshot view -->
+      <div class="venue-tab-pane" data-pane="overview">
+        <!-- VENUE PROFILE (best-for blurb + vibe/cost pills, public) -->
+        <div id="venue-profile-card" class="profile-card" style="display:none"></div>
+        <div id="venue-overview-empty" class="venue-tab-empty" style="display:none">
+          <div style="font-size:32px;margin-bottom:8px">📊</div>
+          <h4>Snapshot coming soon</h4>
+          <p>Click another tab to see this venue's review, eats picks, or community reviews.</p>
+        </div>
+      </div>
+
+      <!-- THE 141 REVIEW TAB -->
+      <div class="venue-tab-pane" data-pane="review" hidden>
+        <div id="admin-scoresheet-display" style="display:none"></div>
+        <div id="admin-scoresheet-editor" style="display:none">
+          <div class="admin-panel" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+            <div class="admin-panel-title" style="margin-bottom:0">👑 Official 141 Review</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-grad" style="padding:8px 16px;font-size:13px" onclick="openAdminDashEditVenue()">✏️ Edit in Admin Panel</button>
+              <button class="btn btn-outline" style="padding:8px 14px;font-size:12px;color:var(--dislike);border-color:var(--dislike)" onclick="admDeleteVenue(currentVenueId)">🗑 Delete</button>
+            </div>
+          </div>
+        </div>
+        <div id="venue-review-empty" class="venue-tab-empty" style="display:none">
+          <div style="font-size:32px;margin-bottom:8px">⭐</div>
+          <h4>No official review yet</h4>
+          <p>Eric hasn't published the 141 review for this venue. Check back soon.</p>
+        </div>
+      </div>
+
+      <!-- PLAN YOUR TRIP TAB -->
+      <div class="venue-tab-pane" data-pane="trip" hidden>
+        <div id="venue-access-card" class="access-card" style="display:none"></div>
+        <div id="venue-profile-edit" class="profile-edit-card" style="display:none"></div>
+        <div id="venue-access-edit" class="access-edit-card" style="display:none"></div>
+        <div id="venue-trip-empty" class="venue-tab-empty" style="display:none">
+          <div style="font-size:32px;margin-bottom:8px">🚦</div>
+          <h4>Trip tips coming soon</h4>
+          <p>Parking, transit, and travel notes for this venue haven't been added yet.</p>
+        </div>
+      </div>
+
+      <!-- EATS TAB -->
+      <div class="venue-tab-pane" data-pane="eats" hidden>
+        <div id="venue-eats-nearby" class="eats-section" style="display:none"></div>
+        <div class="venue-map-card" id="venue-map-card" style="display:none">
+          <div class="venue-map-header">
+            <div>
+              <div class="venue-map-title">🍔 Best Food Around the Stadium</div>
+              <div class="venue-map-subtitle">Restaurants &amp; bars within walking distance</div>
+            </div>
+            <div id="venue-map-pick-count" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--blue-light)"></div>
+          </div>
+          <div id="venue-map"><div class="map-loading"><span class="spinner"></span> Loading map…</div></div>
+          <div class="venue-map-legend">
+            <div class="vml-item"><div class="vml-dot" style="background:#ef4444"></div> Stadium</div>
+            <div class="vml-item"><div class="vml-dot" style="background:#f59e0b"></div> 141 Pick</div>
+            <div class="vml-item"><div class="vml-dot" style="background:#3b82f6"></div> Nearby Food &amp; Bars</div>
           </div>
         </div>
       </div>
 
-      <!-- VENUE PROFILE (best-for blurb + vibe/cost pills, public) -->
-      <div id="venue-profile-card" class="profile-card" style="display:none"></div>
-
-      <!-- GETTING THERE (admin-curated access tips) -->
-      <div id="venue-access-card" class="access-card" style="display:none"></div>
-      <div id="venue-access-edit" class="access-edit-card" style="display:none"></div>
-
-      <!-- VENUE PROFILE EDITOR (admin-only) -->
-      <div id="venue-profile-edit" class="profile-edit-card" style="display:none"></div>
-
-      <!-- EATS & DRINKS NEARBY (cards) -->
-      <div id="venue-eats-nearby" class="eats-section" style="display:none"></div>
-
-      <!-- FOOD MAP -->
-      <div class="venue-map-card" id="venue-map-card" style="display:none">
-        <div class="venue-map-header">
-          <div>
-            <div class="venue-map-title">🍔 Best Food Around the Stadium</div>
-            <div class="venue-map-subtitle">Restaurants &amp; bars within walking distance</div>
-          </div>
-          <div id="venue-map-pick-count" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--blue-light)"></div>
-        </div>
-        <div id="venue-map"><div class="map-loading"><span class="spinner"></span> Loading map…</div></div>
-        <div class="venue-map-legend">
-          <div class="vml-item"><div class="vml-dot" style="background:#ef4444"></div> Stadium</div>
-          <div class="vml-item"><div class="vml-dot" style="background:#f59e0b"></div> 141 Pick</div>
-          <div class="vml-item"><div class="vml-dot" style="background:#3b82f6"></div> Nearby Food &amp; Bars</div>
-        </div>
+      <!-- COMMUNITY REVIEWS TAB -->
+      <div class="venue-tab-pane" data-pane="reviews" hidden>
+        <h3 class="section-head">Community Reviews</h3>
+        <div id="venue-reviews-list"><div class="loading-cards"><span class="spinner"></span> Loading...</div></div>
+        <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="handleReviewClick()">+ Add Your 141 Review</button>
       </div>
-
-            <h3 class="section-head">Community Reviews</h3>
-      <div id="venue-reviews-list"><div class="loading-cards"><span class="spinner"></span> Loading...</div></div>
-      <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="handleReviewClick()">+ Add Your 141 Review</button>
     </div>
     <aside>
       <div class="venue-sid-card">
@@ -2066,6 +2106,67 @@ function _pecToggle(el, isSingle) {
   }
 }
 
+// ── VENUE PAGE TABS ─────────────────────────────────────────────────
+let _activeVenueTab = 'overview';
+
+function setVenueTab(name) {
+  _activeVenueTab = name;
+  // Toggle button active state
+  document.querySelectorAll('.vt-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
+  // Show/hide panes
+  document.querySelectorAll('.venue-tab-pane').forEach(p => {
+    p.hidden = p.dataset.pane !== name;
+  });
+  // When the Eats tab opens, the map may have been initialized while
+  // hidden — Leaflet needs invalidateSize() to re-measure tiles.
+  if (name === 'eats' && _venueMapInstance) {
+    setTimeout(() => { try { _venueMapInstance.invalidateSize(); } catch(e) {} }, 50);
+  }
+}
+
+// Decide which tabs are worth showing for this venue. Empty tabs are
+// hidden for non-admins; admins see all tabs so they can fill content.
+function refreshVenueTabsVisibility(venue) {
+  const sc = venue?.admin_scoresheet || {};
+  const profile = sc.profile || {};
+  const tips = sc.access_tips || {};
+  const admin = isAdmin();
+
+  const hasReview = !!(sc.written_review || sc.video_url || sc.total_score != null);
+  const hasTrip = (profile && Object.keys(profile).length > 0)
+    || (tips && Object.keys(tips).length > 0);
+  const hasOverview = !!(profile.best_for || profile.cost_tier || profile.climate
+    || (Array.isArray(profile.vibe) && profile.vibe.length)
+    || (Array.isArray(profile.food) && profile.food.length)
+    || profile.mobility);
+
+  const tabState = {
+    overview: true, // always visible
+    review:   admin || hasReview,
+    trip:     admin || hasTrip,
+    eats:     true, // map renders for any venue with coords
+    reviews:  true  // community reviews always available
+  };
+
+  Object.keys(tabState).forEach(k => {
+    const btn = document.querySelector(`.vt-btn[data-tab="${k}"]`);
+    if (btn) btn.style.display = tabState[k] ? '' : 'none';
+  });
+
+  // Toggle empty-state placeholders inside each pane
+  const setEmpty = (id, show) => { const el = document.getElementById(id); if (el) el.style.display = show ? 'block' : 'none'; };
+  setEmpty('venue-overview-empty', !hasOverview);
+  setEmpty('venue-review-empty',   !hasReview && !admin);
+  setEmpty('venue-trip-empty',     !hasTrip && !admin);
+
+  // If the active tab got hidden (e.g. user toggled admin off), fall
+  // back to overview.
+  const activeBtn = document.querySelector(`.vt-btn[data-tab="${_activeVenueTab}"]`);
+  if (!activeBtn || activeBtn.style.display === 'none') setVenueTab('overview');
+}
+
 async function saveVenueProfile() {
   if (!isAdmin() || !currentVenueId) return;
   try {
@@ -2754,6 +2855,8 @@ async function loadVenueDetail(venueId, venueName) {
       renderVenueAccessEditor(venue);
       renderVenueProfileCard(venue);
       renderVenueProfileEditor(venue);
+      refreshVenueTabsVisibility(venue);
+      setVenueTab('overview');
     } catch(e) { console.warn('renderVenueAccess error:', e); }
     setEl('venue-detail-meta', [venue.city, venue.state].filter(Boolean).join(', '));
     setEl('vd-sport', venue.sport || '–');
