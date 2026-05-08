@@ -1529,9 +1529,15 @@ function isWorldCupVenue(v) {
   const n = (v.name || '').toLowerCase().trim();
   if (n.length < 5) return false;
   if (_WC2026_VENUES.has(n)) return true;
-  // Only allow match when the WC venue name is a substring of the stored
-  // venue name (handles "MetLife Stadium (East Rutherford)" etc.). The reverse
-  // direction is unsafe — short tokens like "field" would false-positive.
+  // Normalize to alphanumeric-only so hyphen/space/apostrophe variants match
+  // (e.g. DB "Mercedes Benz Stadium" matches key "mercedes-benz stadium").
+  const norm = s => s.replace(/[^a-z0-9]/g, '');
+  const nNorm = norm(n);
+  for (const wc of _WC2026_VENUES) {
+    if (norm(wc) === nNorm) return true;
+  }
+  // Substring match: WC venue name must be substring of stored name
+  // (handles "GEHA Field at Arrowhead Stadium"). Reverse direction unsafe.
   for (const wc of _WC2026_VENUES) {
     if (wc.length >= 6 && n.includes(wc)) return true;
   }
@@ -1693,7 +1699,15 @@ const _WC2026_SCHEDULE = {
 function _wcVenueKey(venue) {
   const n = (venue?.name || '').toLowerCase().trim();
   if (_WC2026_SCHEDULE[n]) return n;
-  // Tolerant match for slight name drift (e.g. "GEHA Field at Arrowhead Stadium" → "arrowhead stadium")
+  // Normalize to alphanumeric-only so hyphen / space / apostrophe drift
+  // matches (e.g. DB "Mercedes Benz Stadium" → key "mercedes-benz stadium").
+  const norm = s => s.replace(/[^a-z0-9]/g, '');
+  const nNorm = norm(n);
+  for (const k of Object.keys(_WC2026_SCHEDULE)) {
+    if (norm(k) === nNorm) return k;
+  }
+  // Last resort: substring match for venues like
+  // "GEHA Field at Arrowhead Stadium" → "arrowhead stadium"
   for (const k of Object.keys(_WC2026_SCHEDULE)) {
     if (n.includes(k) || k.includes(n)) return k;
   }
