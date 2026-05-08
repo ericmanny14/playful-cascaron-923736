@@ -2346,7 +2346,12 @@ function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   window.scrollTo(0, 0);
-  if (name !== 'venue') document.title = '141 venn-U — Stadium Review Community';
+  if (name !== 'venue') {
+    document.title = '141 venn-U — Stadium Review Community';
+    // Strip venue-page JSON-LD so search engines don't see stale schema on home/profile
+    const _oldLd = document.getElementById('venue-jsonld');
+    if (_oldLd) _oldLd.remove();
+  }
   if (name === 'profile') loadProfile();
   if (name === 'home') loadHomeVenues();
   // Only load browse when there is no specific venue — loadVenueDetail sets currentVenueId before
@@ -2857,6 +2862,49 @@ async function loadVenueDetail(venueId, venueName) {
       // og tags
       ['og:title','twitter:title'].forEach(p => { let m = document.querySelector(`meta[property="${p}"],meta[name="${p}"]`); if (m) m.content = document.title; });
       ['og:description','twitter:description'].forEach(p => { let m = document.querySelector(`meta[property="${p}"],meta[name="${p}"]`); if (m) m.content = metaDesc.content; });
+
+      // JSON-LD structured data — surfaces star ratings in Google search
+      try {
+        const oldLd = document.getElementById('venue-jsonld');
+        if (oldLd) oldLd.remove();
+        const scoreVal = sc?.total_score != null ? parseFloat(sc.total_score) : null;
+        const communityCount = Array.isArray(reviews) ? reviews.length : 0;
+        const totalCount = (scoreVal != null && !isNaN(scoreVal) ? 1 : 0) + communityCount;
+        if (totalCount > 0) {
+          const ratingValue = (scoreVal != null && !isNaN(scoreVal)) ? scoreVal : null;
+          const data = {
+            '@context': 'https://schema.org',
+            '@type': 'Place',
+            'name': venue.name,
+            'description': metaDesc.content
+          };
+          if (venue.city || venue.state) {
+            data.address = {
+              '@type': 'PostalAddress',
+              ...(venue.city ? { addressLocality: venue.city } : {}),
+              ...(venue.state ? { addressRegion: venue.state } : {}),
+              addressCountry: 'US'
+            };
+          }
+          if (venue.lat && venue.lng && !isNaN(parseFloat(venue.lat)) && !isNaN(parseFloat(venue.lng))) {
+            data.geo = { '@type': 'GeoCoordinates', latitude: parseFloat(venue.lat), longitude: parseFloat(venue.lng) };
+          }
+          if (ratingValue != null) {
+            data.aggregateRating = {
+              '@type': 'AggregateRating',
+              ratingValue: ratingValue.toFixed(2),
+              bestRating: 5,
+              worstRating: 1,
+              reviewCount: totalCount
+            };
+          }
+          const ld = document.createElement('script');
+          ld.type = 'application/ld+json';
+          ld.id = 'venue-jsonld';
+          ld.text = JSON.stringify(data);
+          document.head.appendChild(ld);
+        }
+      } catch(e) { /* non-fatal */ }
     } catch(e) { /* non-fatal */ }
 
     setEl('venue-sport-tag', [venue.sport, venue.team].filter(Boolean).join(' · ') || 'Venue');
