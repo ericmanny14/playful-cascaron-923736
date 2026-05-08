@@ -363,6 +363,30 @@ nav ul a:hover{color:var(--ink)}
 .access-edit-row textarea{width:100%;min-height:50px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--ink);font-size:13px;font-family:inherit;resize:vertical;line-height:1.4;box-sizing:border-box}
 .access-edit-row textarea:focus{outline:none;border-color:rgba(245,158,11,.5)}
 .access-edit-actions{display:flex;gap:10px;margin-top:12px}
+/* ── VENUE PROFILE (best-for + vibe/cost pills) ── */
+.profile-card{background:linear-gradient(180deg,rgba(63,168,245,.05),var(--bg2) 70%);border:1px solid rgba(63,168,245,.25);border-radius:12px;padding:16px 20px 14px;margin-bottom:20px}
+.profile-best-for{font-size:14px;color:var(--ink);line-height:1.45;font-style:italic;margin-bottom:10px}
+.profile-best-for::before{content:'✨ Best for ';font-style:normal;font-family:'Space Mono',monospace;font-size:11px;color:var(--blue-light);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-right:4px}
+.profile-pills{display:flex;flex-wrap:wrap;gap:6px}
+.p-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-family:'Space Mono',monospace;letter-spacing:.4px;padding:4px 10px;border-radius:14px;background:var(--bg);border:1px solid var(--border);color:var(--muted);text-transform:uppercase}
+.p-pill.cost{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:#f59e0b}
+.p-pill.climate{background:rgba(63,168,245,.1);border-color:rgba(63,168,245,.3);color:var(--blue-light)}
+.p-pill.vibe{background:rgba(30,127,212,.1);border-color:rgba(30,127,212,.3);color:var(--blue-light)}
+.p-pill.food{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#22c55e}
+.profile-edit-card{background:linear-gradient(180deg,rgba(245,158,11,.04),var(--bg2) 70%);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:18px 20px;margin-bottom:24px}
+.profile-edit-card .pec-title{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin:0 0 4px;color:#f59e0b;display:flex;align-items:center;gap:6px}
+.profile-edit-card .pec-sub{font-size:11px;color:var(--muted);margin-bottom:14px;font-family:'Space Mono',monospace}
+.pec-row{margin-bottom:12px}
+.pec-row label{display:block;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.6px;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
+.pec-row textarea,.pec-row input[type=number]{width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--ink);font-size:13px;font-family:inherit;box-sizing:border-box}
+.pec-row textarea{min-height:44px;resize:vertical;line-height:1.4}
+.pec-row textarea:focus,.pec-row input[type=number]:focus{outline:none;border-color:rgba(245,158,11,.5)}
+.pec-chip-row{display:flex;flex-wrap:wrap;gap:6px}
+.pec-chip{font-size:11px;font-family:'Space Mono',monospace;letter-spacing:.4px;padding:5px 10px;border-radius:14px;background:var(--bg);border:1px solid var(--border);color:var(--muted);cursor:pointer;text-transform:uppercase;user-select:none;transition:all .12s}
+.pec-chip:hover{border-color:var(--border2);color:var(--ink)}
+.pec-chip.active{background:rgba(245,158,11,.15);border-color:rgba(245,158,11,.5);color:#f59e0b}
+.pec-chip.single.active{background:rgba(30,127,212,.15);border-color:rgba(30,127,212,.5);color:var(--blue-light)}
+.pec-actions{display:flex;gap:10px;margin-top:14px}
 /* ── WORLD CUP GAMES SIDEBAR CARD ── */
 .wc-games-card{background:linear-gradient(180deg,rgba(245,158,11,.06),var(--bg2) 70%);border:1px solid rgba(245,158,11,.35);border-radius:12px;padding:16px 16px 14px;margin-bottom:16px;position:relative;overflow:hidden}
 .wc-games-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#16a34a,#1e7fd4,#f59e0b)}
@@ -887,9 +911,15 @@ nav ul a:hover{color:var(--ink)}
         </div>
       </div>
 
+      <!-- VENUE PROFILE (best-for blurb + vibe/cost pills, public) -->
+      <div id="venue-profile-card" class="profile-card" style="display:none"></div>
+
       <!-- GETTING THERE (admin-curated access tips) -->
       <div id="venue-access-card" class="access-card" style="display:none"></div>
       <div id="venue-access-edit" class="access-edit-card" style="display:none"></div>
+
+      <!-- VENUE PROFILE EDITOR (admin-only) -->
+      <div id="venue-profile-edit" class="profile-edit-card" style="display:none"></div>
 
       <!-- EATS & DRINKS NEARBY (cards) -->
       <div id="venue-eats-nearby" class="eats-section" style="display:none"></div>
@@ -1873,6 +1903,193 @@ async function saveVenueAccessTips() {
   } catch(e) { showToast('Error saving tips: ' + e.message, 'error'); }
 }
 
+// ── VENUE PROFILE (quiz/travel data) ─────────────────────────────────
+// Stored at admin_scoresheet.profile = { best_for, cost_tier, vibe[], food[], climate, walkability, rec_stay_nights }
+const _PROFILE_VIBE = [
+  { key:'party',     label:'Party' },
+  { key:'family',    label:'Family' },
+  { key:'chill',     label:'Chill' },
+  { key:'foodie',    label:'Foodie' },
+  { key:'outdoorsy', label:'Outdoorsy' },
+  { key:'beach',     label:'Beach' },
+  { key:'urban',     label:'Urban' },
+  { key:'historic',  label:'Historic' }
+];
+const _PROFILE_FOOD = [
+  { key:'bbq',           label:'BBQ' },
+  { key:'mexican',       label:'Mexican' },
+  { key:'latin',         label:'Latin' },
+  { key:'seafood',       label:'Seafood' },
+  { key:'international', label:'International' },
+  { key:'steakhouse',    label:'Steakhouse' },
+  { key:'asian',         label:'Asian' },
+  { key:'vegetarian',    label:'Vegetarian-friendly' }
+];
+const _PROFILE_CLIMATE = [
+  { key:'cool-dry',  label:'Cool & dry' },
+  { key:'warm',      label:'Warm' },
+  { key:'hot-humid', label:'Hot & humid' }
+];
+const _PROFILE_COST = [
+  { key:1, label:'$',   hint:'Budget' },
+  { key:2, label:'$$',  hint:'Mid' },
+  { key:3, label:'$$$', hint:'Premium' }
+];
+
+function _venueProfile(venue) {
+  return venue?.admin_scoresheet?.profile || {};
+}
+
+function renderVenueProfileCard(venue) {
+  const wrap = document.getElementById('venue-profile-card');
+  if (!wrap) return;
+  const p = _venueProfile(venue);
+  const hasAny = (p.best_for && p.best_for.trim())
+    || p.cost_tier || p.climate
+    || (Array.isArray(p.vibe) && p.vibe.length)
+    || (Array.isArray(p.food) && p.food.length)
+    || p.walkability;
+  if (!hasAny) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+
+  const pills = [];
+  if (p.cost_tier) {
+    const c = _PROFILE_COST.find(x => x.key === p.cost_tier);
+    if (c) pills.push(`<span class="p-pill cost" title="${c.hint}">${c.label} · ${_escapeHtml(c.hint)}</span>`);
+  }
+  if (p.climate) {
+    const c = _PROFILE_CLIMATE.find(x => x.key === p.climate);
+    if (c) pills.push(`<span class="p-pill climate">🌡 ${_escapeHtml(c.label)}</span>`);
+  }
+  if (p.walkability) pills.push(`<span class="p-pill" title="Walkability score">🚶 Walkable ${p.walkability}/5</span>`);
+  if (p.rec_stay_nights) pills.push(`<span class="p-pill">🛏 ${p.rec_stay_nights}-night trip</span>`);
+  (Array.isArray(p.vibe) ? p.vibe : []).forEach(k => {
+    const v = _PROFILE_VIBE.find(x => x.key === k);
+    if (v) pills.push(`<span class="p-pill vibe">${_escapeHtml(v.label)}</span>`);
+  });
+  (Array.isArray(p.food) ? p.food : []).forEach(k => {
+    const v = _PROFILE_FOOD.find(x => x.key === k);
+    if (v) pills.push(`<span class="p-pill food">🍽 ${_escapeHtml(v.label)}</span>`);
+  });
+
+  const blurb = (p.best_for || '').trim();
+  wrap.innerHTML = `
+    ${blurb ? `<div class="profile-best-for">${_escapeHtml(blurb)}</div>` : ''}
+    ${pills.length ? `<div class="profile-pills">${pills.join('')}</div>` : ''}
+  `;
+  wrap.style.display = 'block';
+}
+
+function renderVenueProfileEditor(venue) {
+  const wrap = document.getElementById('venue-profile-edit');
+  if (!wrap) return;
+  if (!isAdmin()) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  const p = _venueProfile(venue);
+
+  const chipRow = (groupKey, items, selectedSet, single = false) => items.map(it => {
+    const isOn = single ? (selectedSet === it.key) : selectedSet.has(it.key);
+    return `<span class="pec-chip ${single ? 'single' : ''} ${isOn ? 'active' : ''}" data-group="${groupKey}" data-key="${it.key}" onclick="_pecToggle(this, ${single ? 'true' : 'false'})">${_escapeHtml(it.label)}</span>`;
+  }).join('');
+
+  const vibeSet = new Set(Array.isArray(p.vibe) ? p.vibe : []);
+  const foodSet = new Set(Array.isArray(p.food) ? p.food : []);
+
+  wrap.innerHTML = `
+    <div class="pec-title">👑 Admin · Venue Profile</div>
+    <div class="pec-sub">Powers the "Which venue should you fly to?" quiz and the public profile pills above.</div>
+
+    <div class="pec-row">
+      <label for="pec-best-for">Best for… (1-line headline)</label>
+      <textarea id="pec-best-for" placeholder="Beach mornings, Latin food scene, all-night party">${_escapeHtml(p.best_for || '')}</textarea>
+    </div>
+
+    <div class="pec-row">
+      <label>Cost tier</label>
+      <div class="pec-chip-row">${chipRow('cost', _PROFILE_COST.map(c => ({ key: String(c.key), label: c.label + ' ' + c.hint })), String(p.cost_tier || ''), true)}</div>
+    </div>
+
+    <div class="pec-row">
+      <label>Climate (Jun-Jul)</label>
+      <div class="pec-chip-row">${chipRow('climate', _PROFILE_CLIMATE, p.climate || '', true)}</div>
+    </div>
+
+    <div class="pec-row">
+      <label>Vibe (multi-select)</label>
+      <div class="pec-chip-row">${chipRow('vibe', _PROFILE_VIBE, vibeSet)}</div>
+    </div>
+
+    <div class="pec-row">
+      <label>Food scene (multi-select)</label>
+      <div class="pec-chip-row">${chipRow('food', _PROFILE_FOOD, foodSet)}</div>
+    </div>
+
+    <div class="pec-row" style="display:flex;gap:14px">
+      <div style="flex:1">
+        <label for="pec-walk">Walkability (1-5)</label>
+        <input id="pec-walk" type="number" min="1" max="5" step="1" value="${p.walkability || ''}" placeholder="1=car-only, 5=fully walkable">
+      </div>
+      <div style="flex:1">
+        <label for="pec-nights">Recommended trip length (nights)</label>
+        <input id="pec-nights" type="number" min="1" max="14" step="1" value="${p.rec_stay_nights || ''}" placeholder="e.g. 4">
+      </div>
+    </div>
+
+    <div class="pec-actions">
+      <button class="btn btn-grad" style="padding:9px 18px;font-size:13px" onclick="saveVenueProfile()">💾 Save Profile</button>
+      <button class="btn btn-outline" style="padding:9px 14px;font-size:13px" onclick="renderVenueProfileEditor(_currentVenueForAccess)">↺ Reset</button>
+    </div>
+  `;
+  wrap.style.display = 'block';
+}
+
+// Click handler for chip toggles (single-select clears siblings, multi toggles)
+function _pecToggle(el, isSingle) {
+  if (isSingle) {
+    const group = el.getAttribute('data-group');
+    document.querySelectorAll(`.pec-chip.single[data-group="${group}"]`).forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+  } else {
+    el.classList.toggle('active');
+  }
+}
+
+async function saveVenueProfile() {
+  if (!isAdmin() || !currentVenueId) return;
+  try {
+    const profile = {};
+    const blurb = (document.getElementById('pec-best-for')?.value || '').trim();
+    if (blurb) profile.best_for = blurb;
+
+    // Single-select chips
+    const costEl = document.querySelector('.pec-chip.single.active[data-group="cost"]');
+    if (costEl) profile.cost_tier = parseInt(costEl.getAttribute('data-key'), 10) || null;
+    const climateEl = document.querySelector('.pec-chip.single.active[data-group="climate"]');
+    if (climateEl) profile.climate = climateEl.getAttribute('data-key');
+
+    // Multi-select chips
+    const vibeKeys = Array.from(document.querySelectorAll('.pec-chip.active[data-group="vibe"]:not(.single)')).map(c => c.getAttribute('data-key'));
+    if (vibeKeys.length) profile.vibe = vibeKeys;
+    const foodKeys = Array.from(document.querySelectorAll('.pec-chip.active[data-group="food"]:not(.single)')).map(c => c.getAttribute('data-key'));
+    if (foodKeys.length) profile.food = foodKeys;
+
+    // Numeric inputs
+    const walk = parseInt(document.getElementById('pec-walk')?.value, 10);
+    if (!isNaN(walk) && walk >= 1 && walk <= 5) profile.walkability = walk;
+    const nights = parseInt(document.getElementById('pec-nights')?.value, 10);
+    if (!isNaN(nights) && nights >= 1) profile.rec_stay_nights = nights;
+
+    const _exRows = await _sbGet(`venues?id=eq.${encodeURIComponent(currentVenueId)}&select=admin_scoresheet&limit=1`);
+    const existing = Array.isArray(_exRows) ? _exRows[0] : null;
+    const merged = { ...(existing?.admin_scoresheet || {}), profile: Object.keys(profile).length ? profile : null };
+
+    const { error } = await _sbMutate('PATCH', `venues?id=eq.${encodeURIComponent(currentVenueId)}`, { admin_scoresheet: merged });
+    if (error) { showToast('Error saving profile: ' + error.message, 'error'); return; }
+    showToast('✅ Venue profile saved');
+    _venueCache = null;
+    _currentVenueForAccess = { ...(_currentVenueForAccess || {}), admin_scoresheet: merged };
+    renderVenueProfileCard(_currentVenueForAccess);
+  } catch(e) { showToast('Error saving profile: ' + e.message, 'error'); }
+}
+
 function _eatsCardHtml(p, venue) {
   const c = _eatsCTAs(p, venue);
   const meta = [p.cuisine, p.type].filter(Boolean).join(' · ').replace(/_/g,' ');
@@ -2519,6 +2736,8 @@ async function loadVenueDetail(venueId, venueName) {
       _currentVenueForAccess = venue;
       renderVenueAccessCard(venue);
       renderVenueAccessEditor(venue);
+      renderVenueProfileCard(venue);
+      renderVenueProfileEditor(venue);
     } catch(e) { console.warn('renderVenueAccess error:', e); }
     setEl('venue-detail-meta', [venue.city, venue.state].filter(Boolean).join(', '));
     setEl('vd-sport', venue.sport || '–');
@@ -2769,6 +2988,8 @@ async function loadVenueBrowse() {
   _hide('venue-wc-games');
   _hide('venue-access-card');
   _hide('venue-access-edit');
+  _hide('venue-profile-card');
+  _hide('venue-profile-edit');
   // Destroy any active map instance so it doesn't linger
   if (_venueMapInstance) { try { _venueMapInstance.remove(); } catch(e) {} _venueMapInstance = null; }
   try {
