@@ -267,6 +267,15 @@ nav ul a:hover{color:var(--ink)}
 .profile-name{font-family:'Barlow Condensed',sans-serif;color:var(--ink);font-size:40px;font-weight:800;text-transform:uppercase;letter-spacing:-1px;margin-bottom:4px}
 .profile-handle{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:10px}
 .profile-bio{font-size:14px;color:var(--muted2);max-width:460px;line-height:1.6}
+.wc-scout-pill{display:inline-flex;align-items:center;gap:10px;margin-top:10px;padding:8px 14px;border-radius:999px;font-size:12px;font-family:'Space Mono',monospace;letter-spacing:.4px;background:var(--bg2);border:1px solid var(--border);max-width:fit-content}
+.wc-scout-pill.earned{background:linear-gradient(90deg,rgba(22,163,74,.15),rgba(30,127,212,.15),rgba(245,158,11,.18));border-color:rgba(245,158,11,.5);color:#f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,.15) inset}
+.wc-scout-pill .wcsp-icon{font-size:18px;line-height:1}
+.wc-scout-pill .wcsp-bar{flex:1;min-width:80px;height:4px;border-radius:2px;background:var(--border);overflow:hidden}
+.wc-scout-pill .wcsp-bar-fill{height:100%;background:linear-gradient(90deg,#16a34a,#1e7fd4,#f59e0b);transition:width .4s}
+.wc-scout-pill.earned .wcsp-bar{display:none}
+.wc-scout-pill .wcsp-text{font-weight:700;text-transform:uppercase;color:var(--ink)}
+.wc-scout-pill.earned .wcsp-text{color:#f59e0b}
+.wc-scout-pill .wcsp-sub{color:var(--muted);font-size:10px;letter-spacing:.6px;text-transform:uppercase}
 .profile-stats-row{display:flex;gap:28px;text-align:center}
 .pstat-n{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;background:var(--grad-text);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .pstat-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'Space Mono',monospace}
@@ -1025,6 +1034,7 @@ nav ul a:hover{color:var(--ink)}
           <div class="profile-name" id="profile-display-name">–</div>
           <div class="profile-handle" id="profile-handle">@–</div>
           <div class="profile-bio" id="profile-bio">–</div>
+          <div class="wc-scout-pill" id="wc-scout-pill" style="display:none"></div>
         </div>
         <div class="profile-stats-row">
           <div><div class="pstat-n" id="profile-stat-reviews">0</div><div class="pstat-l">Reviews</div></div>
@@ -1075,6 +1085,9 @@ nav ul a:hover{color:var(--ink)}
         <div class="badge locked" id="badge-nfl"><div class="badge-tier tier-gold"></div><div class="badge-icon">🏈</div><div class="badge-name">NFL Complete</div><div class="badge-desc">All 32 NFL markets reviewed</div></div>
         <div class="badge locked" id="badge-globe"><div class="badge-tier tier-gold"></div><div class="badge-icon">🌎</div><div class="badge-name">Globe Trotter</div><div class="badge-desc">Review a venue outside the US</div></div>
         <div class="badge locked" id="badge-diamond-scout"><div class="badge-tier tier-diamond"></div><div class="badge-icon">💎</div><div class="badge-name">Diamond Scout</div><div class="badge-desc">Review 100 venues</div></div>
+        <div class="badge locked" id="badge-wc-group-scout"><div class="badge-tier tier-gold"></div><div class="badge-icon">⚽</div><div class="badge-name">Group Stage Scout</div><div class="badge-desc" id="badge-wc-group-scout-desc">Review 3+ World Cup 2026 venues</div></div>
+        <div class="badge locked" id="badge-wc-continental"><div class="badge-tier tier-gold"></div><div class="badge-icon">🌎</div><div class="badge-name">Continental Scout</div><div class="badge-desc" id="badge-wc-continental-desc">Review 8+ World Cup 2026 venues</div></div>
+        <div class="badge locked" id="badge-wc-champion"><div class="badge-tier tier-diamond"></div><div class="badge-icon">🏆</div><div class="badge-name">World Cup Champion</div><div class="badge-desc" id="badge-wc-champion-desc">Review all 16 World Cup 2026 host venues</div></div>
       </div>
 
       <div id="my-reviews-section" style="margin-top:32px">
@@ -3692,6 +3705,54 @@ async function loadProfile() {
   const reviewCount = Array.isArray(reviews) ? reviews.length : 0;
   document.getElementById('profile-stat-reviews').textContent = reviewCount;
   document.getElementById('ps-reviews').textContent = reviewCount;
+
+  // WC Scout badges — count distinct WC host venues this user has reviewed
+  try {
+    const seen = new Set();
+    (reviews || []).forEach(r => {
+      if (isWorldCupVenue({ name: r.venue_name })) seen.add((r.venue_name || '').toLowerCase().trim());
+    });
+    const wcCount = seen.size;
+    const TOTAL_WC = 16;
+
+    const pill = document.getElementById('wc-scout-pill');
+    if (pill) {
+      const earned = wcCount >= 3;
+      const tier = wcCount >= 16 ? 'World Cup Champion' : wcCount >= 8 ? 'Continental Scout' : earned ? 'Group Stage Scout' : 'Group Stage Scout';
+      const subtext = earned
+        ? `${wcCount} of ${TOTAL_WC} host venues reviewed`
+        : `${wcCount} of 3 venues to unlock`;
+      const pct = Math.min(100, Math.round((wcCount / 3) * 100));
+      pill.style.display = 'inline-flex';
+      pill.classList.toggle('earned', earned);
+      pill.innerHTML = `
+        <span class="wcsp-icon">${earned ? '⚽' : '🔒'}</span>
+        <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+          <div><span class="wcsp-text">${tier}</span> <span class="wcsp-sub">· ${_escapeHtml(subtext)}</span></div>
+          ${earned ? '' : `<div class="wcsp-bar"><div class="wcsp-bar-fill" style="width:${pct}%"></div></div>`}
+        </div>`;
+    }
+
+    // Badge grid tiles
+    const setBadge = (id, descId, unlocked, lockedDesc, earnedDesc) => {
+      const el = document.getElementById(id);
+      const desc = document.getElementById(descId);
+      if (el) el.classList.toggle('locked', !unlocked);
+      if (desc) desc.textContent = unlocked ? earnedDesc : lockedDesc;
+    };
+    setBadge('badge-wc-group-scout', 'badge-wc-group-scout-desc',
+      wcCount >= 3,
+      `Reviewed ${wcCount}/3 World Cup 2026 venues`,
+      `Group Stage Scout — ${wcCount} WC venues reviewed`);
+    setBadge('badge-wc-continental', 'badge-wc-continental-desc',
+      wcCount >= 8,
+      `Reviewed ${wcCount}/8 World Cup 2026 venues`,
+      `Continental Scout — ${wcCount} WC venues reviewed`);
+    setBadge('badge-wc-champion', 'badge-wc-champion-desc',
+      wcCount >= 16,
+      `Reviewed ${wcCount}/16 World Cup 2026 venues`,
+      `🏆 All 16 World Cup 2026 host venues reviewed`);
+  } catch(e) { console.warn('WC scout calc error:', e); }
 
   // Followers/following
   const [fwersRows, fwingRows] = await Promise.all([
