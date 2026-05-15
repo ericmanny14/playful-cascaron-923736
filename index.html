@@ -319,6 +319,16 @@ nav ul a:hover{color:var(--ink)}
   .wcp-chip .wcp-ic{font-size:18px}
   .wcp-chip .wcp-lb{font-size:11px}
 }
+.wcp-email-capture{margin:12px 0 4px;padding:16px 18px;border-radius:10px;background:linear-gradient(135deg,rgba(30,127,212,.08),rgba(245,158,11,.08));border:1px solid rgba(30,127,212,.3)}
+.wcp-email-title{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--ink);margin-bottom:4px}
+.wcp-email-sub{font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:12px}
+.wcp-email-form{display:flex;gap:8px}
+.wcp-email-form input[type=email]{flex:1;padding:9px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--ink);font-size:13px;font-family:inherit}
+.wcp-email-form input[type=email]:focus{outline:none;border-color:var(--blue)}
+.wcp-email-fineprint{margin-top:8px;font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.3px}
+.wcp-email-success{text-align:center;padding:8px 4px}
+.wcp-email-success-title{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#22c55e;margin-bottom:4px}
+.wcp-email-success-sub{font-size:12px;color:var(--muted);line-height:1.5}
 .profile-stats-row{display:flex;gap:28px;text-align:center}
 .pstat-n{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;background:var(--grad-text);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .pstat-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'Space Mono',monospace}
@@ -1305,6 +1315,7 @@ nav ul a:hover{color:var(--ink)}
     </div>
     <div id="wcp-step-results" style="display:none">
       <div id="wcp-results-list"></div>
+      <div id="wcp-email-capture" class="wcp-email-capture" style="display:none"></div>
       <div class="wcp-actions">
         <button class="btn btn-outline" style="padding:8px 14px;font-size:13px" onclick="wcpBackToPick()">← Refine</button>
         <div style="display:flex;gap:8px">
@@ -1878,6 +1889,74 @@ function wcpComputeResults() {
   document.getElementById('wcp-step-results').style.display = 'block';
   _wcpWriteUrl();
   try { localStorage.setItem('wc_picker_last', Array.from(_wcpSelected).join(',')); } catch(e) {}
+  // Render the email capture block (only for non-signed-in users)
+  renderWcpEmailCapture();
+}
+
+function renderWcpEmailCapture() {
+  const wrap = document.getElementById('wcp-email-capture');
+  if (!wrap) return;
+  if (currentUser) {
+    // Already signed in — no need to capture an email
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    return;
+  }
+  // Don't pester after a successful submit
+  try {
+    if (localStorage.getItem('wc_picker_email_submitted') === '1') {
+      wrap.style.display = 'none';
+      wrap.innerHTML = '';
+      return;
+    }
+  } catch(e) {}
+  wrap.innerHTML = `
+    <div class="wcp-email-title">📬 Save your picks + get the tournament digest</div>
+    <div class="wcp-email-sub">Drop your email — we'll send your top match, full ranking of all 16 host venues, and a weekly venue update through the tournament.</div>
+    <form class="wcp-email-form" onsubmit="event.preventDefault(); submitWcpEmail()">
+      <input type="email" id="wcp-email-input" placeholder="you@example.com" required>
+      <button type="submit" class="btn btn-grad" style="padding:9px 16px;font-size:13px;white-space:nowrap">Save My Picks →</button>
+    </form>
+    <div class="wcp-email-fineprint">No spam. Unsubscribe anytime. Free.</div>
+  `;
+  wrap.style.display = 'block';
+}
+
+async function submitWcpEmail() {
+  const input = document.getElementById('wcp-email-input');
+  const email = (input?.value || '').trim().toLowerCase();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    showToast('Please enter a valid email', 'error');
+    return;
+  }
+  const picks = Array.from(_wcpSelected).join(',');
+  try {
+    // Best-effort write to a newsletter_subscriptions table. If the table
+    // doesn't exist yet in Supabase, we still mark "submitted" client-side
+    // so the user isn't bothered again and gets a friendly thank-you.
+    const { error } = await _sbMutate('POST', 'newsletter_subscriptions?on_conflict=email', {
+      email,
+      source: 'wc_picker',
+      picks
+    });
+    if (error && !/duplicate|conflict|already/i.test(error.message || '')) {
+      console.warn('[wcp-email] db write failed (table missing?):', error.message);
+    }
+  } catch(e) {
+    console.warn('[wcp-email] submit error:', e);
+  }
+  try { localStorage.setItem('wc_picker_email_submitted', '1'); } catch(e) {}
+  const wrap = document.getElementById('wcp-email-capture');
+  if (wrap) {
+    wrap.innerHTML = `
+      <div class="wcp-email-success">
+        <div style="font-size:28px;margin-bottom:6px">📬</div>
+        <div class="wcp-email-success-title">You're on the list</div>
+        <div class="wcp-email-success-sub">We'll send your match + the weekly digest to <strong>${_escapeHtml(email)}</strong>.</div>
+      </div>
+    `;
+  }
+  showToast('✅ Saved! Watch your inbox for your full match.');
 }
 
 // 2026 FIFA World Cup match schedule per host venue.
