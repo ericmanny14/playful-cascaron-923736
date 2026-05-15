@@ -1693,6 +1693,18 @@ function _wcpChipHtml(s) {
 function openWcPicker() {
   // Always reset to the picker step when opening fresh
   _wcpEnsureVenues();
+  // If nothing currently selected, try restoring last selection from localStorage
+  if (_wcpSelected.size === 0) {
+    try {
+      const saved = localStorage.getItem('wc_picker_last');
+      if (saved) {
+        saved.split(',').forEach(k => {
+          const clean = k.trim().toLowerCase();
+          if (_WC2026_SUPERLATIVES.some(s => s.key === clean)) _wcpSelected.add(clean);
+        });
+      }
+    } catch(e) {}
+  }
   document.getElementById('wcp-step-pick').style.display = 'block';
   document.getElementById('wcp-step-results').style.display = 'none';
   document.getElementById('wcp-grid').innerHTML = _WC2026_SUPERLATIVES.map(_wcpChipHtml).join('');
@@ -1850,6 +1862,7 @@ function wcpComputeResults() {
   document.getElementById('wcp-step-pick').style.display = 'none';
   document.getElementById('wcp-step-results').style.display = 'block';
   _wcpWriteUrl();
+  try { localStorage.setItem('wc_picker_last', Array.from(_wcpSelected).join(',')); } catch(e) {}
 }
 
 // 2026 FIFA World Cup match schedule per host venue.
@@ -2784,8 +2797,14 @@ async function signUp() {
   if (!email || !pass || !name) { showToast('Please fill in all fields', 'error'); return; }
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Creating account...'; }
   try {
+    // Flag this session as a first-time signup so SIGNED_IN handler opens the picker
+    try { localStorage.setItem('wc_picker_post_signup', '1'); } catch(e) {}
     const { error } = await sb.auth.signUp({ email, password: pass, options: { data: { display_name: name } } });
-    if (error) { showToast(error.message, 'error'); return; }
+    if (error) {
+      try { localStorage.removeItem('wc_picker_post_signup'); } catch(e) {}
+      showToast(error.message, 'error');
+      return;
+    }
     showToast('✅ Account created! Check your email to confirm.', 'success');
     closeModal('auth');
   } catch(e) { showToast('Sign-up error: ' + e.message, 'error'); }
@@ -4246,6 +4265,9 @@ sb.auth.onAuthStateChange(async (event, session) => {
           venues_reviewed: 0,
         });
         currentProfile = { id: currentUser.id, display_name: displayName };
+        // No existing profile row → this is a first-time signup, even via OAuth.
+        // Flag for the picker post-signup nudge (the SIGNED_IN branch below reads it).
+        try { localStorage.setItem('wc_picker_post_signup', '1'); } catch(e) {}
       } else {
         currentProfile = profile;
       }
@@ -4256,6 +4278,16 @@ sb.auth.onAuthStateChange(async (event, session) => {
         showToast('👋 Welcome' + (currentProfile?.display_name ? ', ' + currentProfile.display_name + '!' : '!'));
         // Refresh home venue grid so auth-gated content is ready
         if (document.querySelector('#page-home.active')) loadHomeVenues();
+        // First-time signup? Show the WC venue picker as a friendly onboarding step.
+        try {
+          if (localStorage.getItem('wc_picker_post_signup') === '1') {
+            localStorage.removeItem('wc_picker_post_signup');
+            setTimeout(() => {
+              showToast('🎯 Pick your World Cup vibes — find your venue match');
+              openWcPicker();
+            }, 600);
+          }
+        } catch(e) { /* localStorage blocked — non-fatal */ }
       } else if (event === 'TOKEN_REFRESHED') {
         startAutoLogout(); // token refreshed = still active — reset the timer
       }
