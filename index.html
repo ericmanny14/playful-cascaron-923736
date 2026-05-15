@@ -1318,7 +1318,7 @@ nav ul a:hover{color:var(--ink)}
         <h2 style="margin:0">⚽ Find Your World Cup Venue</h2>
         <div style="font-size:12px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.4px;margin-top:4px">Pick what matters most. We'll show you where to go.</div>
       </div>
-      <button class="close-x" onclick="closeModal('wc-picker')">✕</button>
+      <button class="close-x" onclick="closeWcPicker()">✕</button>
     </div>
     <div id="wcp-step-pick">
       <div class="wcp-grid" id="wcp-grid"><!-- populated by JS --></div>
@@ -1337,7 +1337,7 @@ nav ul a:hover{color:var(--ink)}
         <button class="btn btn-outline" style="padding:8px 14px;font-size:13px" onclick="wcpBackToPick()">← Refine</button>
         <div style="display:flex;gap:8px">
           <button class="btn btn-outline" style="padding:8px 14px;font-size:13px" onclick="copyPickerShareLink()">🔗 Share Link</button>
-          <button class="btn btn-grad" style="padding:8px 18px;font-size:13px" onclick="closeModal('wc-picker')">Done</button>
+          <button class="btn btn-grad" style="padding:8px 18px;font-size:13px" onclick="closeWcPicker()">Done</button>
         </div>
       </div>
     </div>
@@ -1694,6 +1694,7 @@ const _WC2026_SUPERLATIVES = [
 
 const _wcpSelected = new Set();
 let _wcpVenueRows = null; // cached venue lookup for navigating to detail pages
+let _wcpAutoOpenedThisSession = false; // true when the SIGNED_IN handler auto-opened the picker
 
 function _wcpNormName(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1787,6 +1788,8 @@ function _wcpWriteUrl() {
 async function copyPickerShareLink() {
   try {
     const url = window.location.origin + window.location.pathname + '?picker=' + Array.from(_wcpSelected).join(',');
+    // Update the address bar too so the user can copy by hand if needed
+    _wcpWriteUrl();
     await navigator.clipboard.writeText(url);
     showToast('🔗 Share link copied!');
   } catch(e) {
@@ -1796,8 +1799,17 @@ async function copyPickerShareLink() {
 
 // Auto-open the picker on page load if the URL has ?picker=... and
 // immediately show results. Lets shared links land directly on results.
+// After opening, we strip ?picker= from the URL so refreshing doesn't
+// re-trigger the modal (which previously left a soccer-ball icon hanging
+// in the middle of the screen on every page load).
 function _wcpMaybeAutoOpen() {
   if (_wcpReadUrl()) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      params.delete('picker');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+    } catch(e) {}
     openWcPicker();
     // Give the modal a beat to render then jump to results
     setTimeout(() => { try { wcpComputeResults(); } catch(e) {} }, 60);
@@ -1836,6 +1848,21 @@ function wcpReset() {
 function wcpBackToPick() {
   document.getElementById('wcp-step-results').style.display = 'none';
   document.getElementById('wcp-step-pick').style.display = 'block';
+}
+
+// Close handler that records a "dismiss" if the user bailed on an
+// auto-opened picker without completing it, so we don't re-prompt every
+// time they sign in. Once they actually complete the picker we set
+// wc_picker_last instead (in wcpComputeResults).
+function closeWcPicker() {
+  try {
+    const completed = !!localStorage.getItem('wc_picker_last');
+    if (_wcpAutoOpenedThisSession && !completed) {
+      localStorage.setItem('wc_picker_dismissed', '1');
+    }
+  } catch(e) {}
+  _wcpAutoOpenedThisSession = false;
+  closeModal('wc-picker');
 }
 
 function wcpComputeResults() {
@@ -1883,7 +1910,7 @@ function wcpComputeResults() {
     listEl.innerHTML = top.map((v, i) => {
       const venueRow = _wcpFindVenueRow(v.name);
       const detailClick = venueRow
-        ? `onclick="closeModal('wc-picker'); loadVenueDetail('${venueRow.id}', ${JSON.stringify(venueRow.name)})"`
+        ? `onclick="closeWcPicker(); loadVenueDetail('${venueRow.id}', ${JSON.stringify(venueRow.name)})"`
         : '';
       const tagsHtml = v.tags.map(t => `
         <span class="wcp-tag ${t.role === 'runner' ? 'runner' : ''}" style="--sl-color:${t.superlative.color}">
@@ -1904,7 +1931,9 @@ function wcpComputeResults() {
 
   document.getElementById('wcp-step-pick').style.display = 'none';
   document.getElementById('wcp-step-results').style.display = 'block';
-  _wcpWriteUrl();
+  // Persist the user's latest picks so they don't get re-prompted next visit.
+  // Note: we no longer auto-write the URL here — that caused the picker to
+  // reopen on every refresh. URL only updates when the user clicks Share.
   try { localStorage.setItem('wc_picker_last', Array.from(_wcpSelected).join(',')); } catch(e) {}
   // Render the email capture block (only for non-signed-in users)
   renderWcpEmailCapture();
@@ -4596,12 +4625,22 @@ sb.auth.onAuthStateChange(async (event, session) => {
         showToast('👋 Welcome' + (currentProfile?.display_name ? ', ' + currentProfile.display_name + '!' : '!'));
         // Refresh home venue grid so auth-gated content is ready
         if (document.querySelector('#page-home.active')) loadHomeVenues();
-        // First-time signup? Show the WC venue picker as a friendly onboarding step.
+        // First-time signup OR returning user who's never taken the picker?
+        // Auto-open it so existing accounts get the same form-fill experience
+        // new users get. Once they've taken it (wc_picker_last) or explicitly
+        // skipped it (wc_picker_dismissed), we never auto-prompt again — they
+        // can still open it any time via the nav button.
         try {
-          if (localStorage.getItem('wc_picker_post_signup') === '1') {
-            localStorage.removeItem('wc_picker_post_signup');
+          const isNewSignup = localStorage.getItem('wc_picker_post_signup') === '1';
+          const hasTaken = !!localStorage.getItem('wc_picker_last');
+          const hasDismissed = localStorage.getItem('wc_picker_dismissed') === '1';
+          if (isNewSignup || (!hasTaken && !hasDismissed)) {
+            if (isNewSignup) localStorage.removeItem('wc_picker_post_signup');
+            _wcpAutoOpenedThisSession = true;
             setTimeout(() => {
-              showToast('🎯 Pick your World Cup vibes — find your venue match');
+              showToast(isNewSignup
+                ? '🎯 Pick your World Cup vibes — find your venue match'
+                : '👋 Welcome back — take 30 seconds to find your WC venue');
               openWcPicker();
             }, 600);
           }
