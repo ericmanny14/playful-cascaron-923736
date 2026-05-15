@@ -64,6 +64,9 @@ nav ul a:hover{color:var(--ink)}
 .nav-signout:hover{border-color:var(--dislike);color:var(--dislike)}
 .nav-signin-btn{font-size:13px;font-weight:600;font-family:'Barlow',sans-serif;cursor:pointer;padding:7px 16px;border-radius:8px;border:1.5px solid var(--blue);color:var(--blue-light);background:rgba(30,127,212,.08);transition:all .15s}
 .nav-signin-btn:hover{background:rgba(30,127,212,.18);border-color:var(--blue-light)}
+.nav-wc-btn{font-size:13px;font-weight:700;font-family:'Barlow',sans-serif;cursor:pointer;padding:7px 14px;border-radius:8px;border:1.5px solid rgba(245,158,11,.5);color:#f59e0b;background:linear-gradient(135deg,rgba(22,163,74,.1),rgba(30,127,212,.1),rgba(245,158,11,.12));transition:all .15s;margin-right:8px}
+.nav-wc-btn:hover{border-color:#f59e0b;background:linear-gradient(135deg,rgba(22,163,74,.18),rgba(30,127,212,.18),rgba(245,158,11,.22))}
+@media (max-width:720px){.nav-wc-btn{display:none}}
 .hidden{display:none!important}
 
 /* ── BUTTONS ── */
@@ -723,6 +726,7 @@ nav ul a:hover{color:var(--ink)}
     <span class="nav-username hidden" id="nav-username"></span>
     <div class="nav-avatar hidden" id="nav-avatar" onclick="showPage('profile')"></div>
     <button class="nav-signout hidden" id="nav-signout" onclick="signOut()">Sign Out</button>
+    <button class="nav-wc-btn" onclick="openWcPicker()" title="Find your World Cup venue match">⚽ Find My WC Venue</button>
     <button class="nav-signin-btn" id="nav-signin-btn" onclick="openModal('auth')">Sign In / Register</button>
   </div>
 </nav>
