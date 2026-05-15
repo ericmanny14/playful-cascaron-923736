@@ -2958,7 +2958,7 @@ function switchAuthTab(tab, btn) {
 
 function handleReviewClick() {
   closeMobileMenu();
-  if (!currentUser) { openModal('auth'); return; }
+  // Auth gate moved to submit time — let users fill out the form first.
   openModal('submit');
   // Pre-fill and lock venue name when already on a specific venue page
   if (currentVenueId) {
@@ -3075,8 +3075,10 @@ function updateNavUI(user) {
       if (signout) signout.classList.add('hidden');
       if (signinBtn) signinBtn.classList.remove('hidden');
       if (banner) banner.classList.remove('hidden');
-      if (qsGate) qsGate.style.display = 'block';
-      if (qsForm) qsForm.style.display = 'none';
+      // Auth wall moved to submit time — show the form so anyone can
+      // try the experience before being asked to sign up.
+      if (qsGate) qsGate.style.display = 'none';
+      if (qsForm) qsForm.style.display = 'block';
     }
   } catch(e) {
     console.error('updateNavUI error:', e);
@@ -3213,8 +3215,93 @@ async function submitReview(prefix, venueName, venueDetails, section, reviewText
   }
 }
 
+function _showPendingReviewBanner() {
+  const modal = document.getElementById('modal-auth');
+  if (!modal) return;
+  const existing = document.getElementById('pending-review-banner');
+  if (existing) return; // already shown
+  const banner = document.createElement('div');
+  banner.id = 'pending-review-banner';
+  banner.style.cssText = 'background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(30,127,212,.15));border:1px solid rgba(245,158,11,.45);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--ink);line-height:1.4';
+  banner.innerHTML = '🎯 <strong>Your review is ready.</strong> Sign in to publish it and earn your first passport stamp.';
+  const box = modal.querySelector('.modal-box');
+  const hdr = modal.querySelector('.modal-hdr');
+  if (box && hdr) box.insertBefore(banner, hdr.nextSibling);
+}
+
+function _clearPendingReviewBanner() {
+  const el = document.getElementById('pending-review-banner');
+  if (el) el.remove();
+}
+
+// ── PENDING REVIEW (signup wall lifted — submit replays after auth) ──
+function _savePendingReview(prefix) {
+  try {
+    const fieldIds = prefix === 'qs'
+      ? ['qs-venue-name','qs-venue-id','qs-venue-details','qs-review-text']
+      : ['m-venue-name','m-venue-id','m-venue-details','m-section','m-review-text'];
+    const data = { prefix, fields: {}, anonymous: false, reactions: {} };
+    fieldIds.forEach(id => { const el = document.getElementById(id); if (el) data.fields[id] = el.value; });
+    const anonEl = document.getElementById(prefix === 'qs' ? 'qs-anonymous' : 'm-anonymous');
+    data.anonymous = !!(anonEl && anonEl.checked);
+    Object.keys(reactions).forEach(k => { if (k.startsWith(prefix + '-')) data.reactions[k] = reactions[k]; });
+    localStorage.setItem('pending_review', JSON.stringify(data));
+    return true;
+  } catch(e) { return false; }
+}
+
+async function _replayPendingReview() {
+  let data;
+  try { data = JSON.parse(localStorage.getItem('pending_review') || 'null'); } catch(e) { return; }
+  if (!data || !data.prefix) return;
+  try { localStorage.removeItem('pending_review'); } catch(e) {}
+
+  // Restore form fields
+  Object.entries(data.fields || {}).forEach(([id, val]) => {
+    const el = document.getElementById(id); if (el) el.value = val;
+  });
+  // Restore anonymous toggle
+  const anonEl = document.getElementById(data.prefix === 'qs' ? 'qs-anonymous' : 'm-anonymous');
+  if (anonEl) anonEl.checked = !!data.anonymous;
+  // Restore reactions (in-memory store + selected button state)
+  Object.entries(data.reactions || {}).forEach(([key, val]) => {
+    reactions[key] = val;
+    const escSel = `[onclick*="'${key}'"][onclick*=",${val})"]`;
+    document.querySelectorAll(escSel).forEach(b => {
+      b.closest('.reaction-btns')?.querySelectorAll('.r-btn').forEach(other => other.classList.remove('selected'));
+      b.classList.add('selected');
+    });
+    try { recalcScore(key); } catch(e) {}
+  });
+
+  // If the user was reviewing a specific venue, re-open that page first so
+  // submitModalReview targets the right venue.
+  if (data.prefix === 'm' && data.fields['m-venue-id']) {
+    const venueId = data.fields['m-venue-id'];
+    if (venueId && venueId !== currentVenueId) {
+      try { await loadVenueDetail(venueId, data.fields['m-venue-name'] || ''); } catch(e) {}
+    }
+    openModal('submit');
+  }
+
+  showToast('📝 Publishing the review you started…');
+  setTimeout(() => {
+    if (data.prefix === 'qs') submitQuickReview();
+    else submitModalReview();
+  }, 500);
+}
+
 async function submitQuickReview() {
-  if (!currentUser) { openModal('auth'); return; }
+  if (!currentUser) {
+    if (_savePendingReview('qs')) {
+      _showPendingReviewBanner();
+      openModal('auth');
+      showToast('🎯 Almost there — sign in to save your review.');
+      return;
+    }
+    openModal('auth');
+    return;
+  }
   const btn = document.getElementById('qs-submit-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Publishing...';
   try {
@@ -3250,7 +3337,16 @@ async function submitQuickReview() {
 }
 
 async function submitModalReview() {
-  if (!currentUser) { openModal('auth'); return; }
+  if (!currentUser) {
+    if (_savePendingReview('m')) {
+      _showPendingReviewBanner();
+      openModal('auth');
+      showToast('🎯 Almost there — sign in to save your review.');
+      return;
+    }
+    openModal('auth');
+    return;
+  }
   const btn = document.getElementById('modal-submit-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Publishing...';
   try {
@@ -4510,6 +4606,14 @@ sb.auth.onAuthStateChange(async (event, session) => {
             }, 600);
           }
         } catch(e) { /* localStorage blocked — non-fatal */ }
+        // If the user was mid-review when they got auth-gated, restore and
+        // auto-publish what they had typed before signing in.
+        try {
+          _clearPendingReviewBanner();
+          if (localStorage.getItem('pending_review')) {
+            setTimeout(() => { _replayPendingReview(); }, 400);
+          }
+        } catch(e) {}
       } else if (event === 'TOKEN_REFRESHED') {
         startAutoLogout(); // token refreshed = still active — reset the timer
       }
