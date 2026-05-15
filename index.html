@@ -92,13 +92,24 @@ nav ul a:hover{color:var(--ink)}
 .cs-pill-icon{font-size:20px;flex-shrink:0}
 .cs-pill strong{color:var(--ink);font-weight:600}
 /* ── FEATURED VENUE STRIP (hero bottom) ── */
-.hero-venue-strip{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:28px}
-.hvs-card{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;transition:all .2s;min-width:140px;text-align:left}
-.hvs-card:hover{border-color:var(--blue);background:rgba(30,127,212,.08);transform:translateY(-2px)}
-.hvs-name{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;text-transform:uppercase;color:var(--ink);letter-spacing:.3px}
-.hvs-loc{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:2px}
-.hvs-score{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--blue-light);margin-top:6px}
-.hero-logo{width:130px;height:130px;object-fit:contain;margin:0 auto 24px;display:block;filter:drop-shadow(0 0 24px rgba(30,127,212,.35));animation:logoFloat 4s ease-in-out infinite}
+.hero-venue-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:24px auto 20px;max-width:780px}
+.hvs-card{position:relative;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid var(--border);border-radius:14px;padding:18px 18px 16px;cursor:pointer;transition:all .2s;text-align:left;min-height:120px;display:flex;flex-direction:column;justify-content:space-between}
+.hvs-card:hover{border-color:var(--blue);background:linear-gradient(180deg,rgba(30,127,212,.14),rgba(30,127,212,.04));transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.hvs-card.skeleton{cursor:default;pointer-events:none;background:linear-gradient(90deg,rgba(255,255,255,.03),rgba(255,255,255,.07),rgba(255,255,255,.03));background-size:200% 100%;animation:hvsShimmer 1.6s infinite linear;border-color:var(--border)}
+.hvs-card.skeleton:hover{transform:none;box-shadow:none;border-color:var(--border)}
+@keyframes hvsShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.hvs-rank{position:absolute;top:10px;right:12px;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase}
+.hvs-rank.top{color:#f59e0b;font-weight:700}
+.hvs-wc-tag{display:inline-block;font-size:9px;font-family:'Space Mono',monospace;letter-spacing:.6px;padding:2px 7px;border-radius:4px;background:linear-gradient(135deg,rgba(22,163,74,.18),rgba(30,127,212,.18),rgba(245,158,11,.22));border:1px solid rgba(245,158,11,.4);color:#f59e0b;text-transform:uppercase;font-weight:700;margin-bottom:6px}
+.hvs-name{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:800;text-transform:uppercase;color:var(--ink);letter-spacing:.3px;line-height:1.05}
+.hvs-loc{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:4px;letter-spacing:.3px}
+.hvs-score{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--blue-light);margin-top:10px}
+.hvs-score::before{content:'⭐ ';font-size:12px}
+@media (max-width:680px){
+  .hero-venue-strip{grid-template-columns:1fr;gap:10px;max-width:380px}
+  .hvs-card{min-height:auto;padding:14px 16px}
+}
+.hero-logo{width:72px;height:72px;object-fit:contain;margin:0 auto 14px;display:block;filter:drop-shadow(0 0 16px rgba(30,127,212,.32));animation:logoFloat 4s ease-in-out infinite}
 @keyframes logoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 .eyebrow{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3.5px;text-transform:uppercase;color:var(--blue-light);margin-bottom:20px;display:inline-flex;align-items:center;gap:8px}
 .eyebrow::before,.eyebrow::after{content:'';display:block;width:24px;height:1px;background:var(--blue)}
@@ -738,11 +749,15 @@ nav ul a:hover{color:var(--ink)}
     <div class="eyebrow">The 1-4-1 Scoring Method</div>
     <h1>Rate Every <span class="outline">World Cup 2026</span> Venue.</h1>
     <p><strong>16 host cities. One score.</strong> The only stadium review community built around a real 6-category scoring system — from pre-game traffic to post-game surroundings. Score every venue, earn your World Cup Scout badge, and decide where to fly before the matches sell out.</p>
+    <div class="hero-venue-strip" id="hero-venue-strip">
+      <div class="hvs-card skeleton"><span class="hvs-rank">#1</span></div>
+      <div class="hvs-card skeleton"><span class="hvs-rank">#2</span></div>
+      <div class="hvs-card skeleton"><span class="hvs-rank">#3</span></div>
+    </div>
     <div class="hero-btns">
       <button class="btn btn-grad" onclick="openWcPicker()">🎯 Find Your WC Venue</button>
       <button class="btn btn-outline" onclick="filterHomeByLeague('WORLDCUP', document.querySelector('.lf-btn[onclick*=WORLDCUP]')); document.getElementById('home-venue-grid')?.scrollIntoView({behavior:'smooth',block:'start'})">See All 16 Venues</button>
     </div>
-    <div class="hero-venue-strip" id="hero-venue-strip" style="display:none"></div>
     <div class="community-strip">
       <div class="cs-pill"><span class="cs-pill-icon">🏅</span><span><strong>Earn badges</strong> — the more venues you review, the more you unlock</span></div>
       <div class="cs-pill"><span class="cs-pill-icon">🤝</span><span><strong>Build your crew</strong> — follow scouts, share takes, compare road trips</span></div>
@@ -3417,26 +3432,37 @@ function renderHomeVenueGrid(venues) {
   grid.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px">
     ${venues.map(v => buildVenueCardInner(v, `onclick="handleVenueClick('${v.id}','${v.name.replace(/'/g,"\\'")}')"` )).join('')}
   </div>`;
-  // Populate hero featured strip (top 3 scored venues)
+  // Populate hero featured strip — prioritize WC2026 venues with admin
+  // scores, then any other scored venues. Fills exactly 3 slots when data
+  // is available, otherwise leaves skeleton placeholders untouched.
   const strip = document.getElementById('hero-venue-strip');
   if (strip) {
-    const top = [...venues].filter(v => v.admin_scoresheet?.total_score != null)
-      .sort((a, b) => parseFloat(b.admin_scoresheet.total_score) - parseFloat(a.admin_scoresheet.total_score))
-      .slice(0, 3);
+    const scored = venues.filter(v => v.admin_scoresheet?.total_score != null);
+    const wcScored = scored.filter(v => isWorldCupVenue(v));
+    const otherScored = scored.filter(v => !isWorldCupVenue(v));
+    const byScore = (a, b) => parseFloat(b.admin_scoresheet.total_score) - parseFloat(a.admin_scoresheet.total_score);
+    wcScored.sort(byScore);
+    otherScored.sort(byScore);
+    const top = [...wcScored, ...otherScored].slice(0, 3);
     if (top.length) {
-      strip.style.display = 'flex';
-      strip.innerHTML = top.map(v => {
+      strip.innerHTML = top.map((v, i) => {
         const loc = [v.city, v.state].filter(Boolean).join(', ');
         const score = parseFloat(v.admin_scoresheet.total_score).toFixed(2);
+        const wc = isWorldCupVenue(v);
+        const rankLabel = i === 0 ? '🏆 TOP RATED' : `#${i+1}`;
         return `<div class="hvs-card" onclick="handleVenueClick('${v.id}','${v.name.replace(/'/g,"\\'")}')">
-          <div class="hvs-name">${v.name}</div>
-          ${loc ? `<div class="hvs-loc">${loc}</div>` : ''}
+          <span class="hvs-rank ${i === 0 ? 'top' : ''}">${rankLabel}</span>
+          <div>
+            ${wc ? '<div class="hvs-wc-tag">⚽ WC 2026 Host</div>' : ''}
+            <div class="hvs-name">${_escapeHtml(v.name)}</div>
+            ${loc ? `<div class="hvs-loc">${_escapeHtml(loc)}</div>` : ''}
+          </div>
           <div class="hvs-score">${score} / 5.00</div>
         </div>`;
       }).join('');
-    } else {
-      strip.style.display = 'none';
     }
+    // If we have fewer than 3 results, leave skeleton placeholders for any
+    // missing slots — they're already pre-rendered in the markup.
   }
 }
 
