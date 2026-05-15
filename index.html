@@ -276,6 +276,35 @@ nav ul a:hover{color:var(--ink)}
 .wc-scout-pill .wcsp-text{font-weight:700;text-transform:uppercase;color:var(--ink)}
 .wc-scout-pill.earned .wcsp-text{color:#f59e0b}
 .wc-scout-pill .wcsp-sub{color:var(--muted);font-size:10px;letter-spacing:.6px;text-transform:uppercase}
+/* ── WORLD CUP VENUE PICKER ── */
+.wcp-box{max-width:720px;width:94%}
+.wcp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:18px}
+.wcp-chip{--sl-color:var(--blue);position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 10px;border-radius:10px;background:var(--bg);border:1.5px solid var(--border);color:var(--muted);cursor:pointer;text-align:center;transition:all .15s;user-select:none;min-height:88px}
+.wcp-chip:hover{border-color:var(--sl-color);color:var(--ink);transform:translateY(-1px)}
+.wcp-chip.active{background:color-mix(in srgb, var(--sl-color) 18%, var(--bg2));border-color:var(--sl-color);color:var(--ink);box-shadow:0 0 0 1px var(--sl-color) inset}
+.wcp-chip.active::after{content:'✓';position:absolute;top:6px;right:8px;width:18px;height:18px;border-radius:50%;background:var(--sl-color);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.wcp-chip .wcp-ic{font-size:22px;line-height:1}
+.wcp-chip .wcp-lb{font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;line-height:1.2}
+.wcp-actions{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-top:14px;border-top:1px solid var(--border);margin-top:8px}
+.wcp-result-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:all .15s}
+.wcp-result-card:hover{border-color:var(--blue);transform:translateY(-1px)}
+.wcp-result-card.top{background:linear-gradient(135deg,rgba(245,158,11,.08),var(--bg) 70%);border-color:rgba(245,158,11,.4)}
+.wcp-result-rank{display:inline-block;font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:800;letter-spacing:.6px;color:var(--muted);text-transform:uppercase;margin-right:8px}
+.wcp-result-card.top .wcp-result-rank{color:#f59e0b}
+.wcp-result-name{display:inline-block;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:var(--ink);text-transform:uppercase;letter-spacing:.3px;line-height:1.1}
+.wcp-result-meta{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:4px;letter-spacing:.3px}
+.wcp-result-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.wcp-tag{--sl-color:var(--blue);display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:'Space Mono',monospace;letter-spacing:.4px;padding:3px 8px;border-radius:10px;background:color-mix(in srgb,var(--sl-color) 14%,var(--bg2));border:1px solid color-mix(in srgb,var(--sl-color) 40%,transparent);color:var(--sl-color);text-transform:uppercase;font-weight:700}
+.wcp-tag.runner{opacity:.75;font-weight:500}
+.wcp-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+.close-x{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:4px 8px}
+.close-x:hover{color:var(--ink)}
+@media (max-width:560px){
+  .wcp-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px}
+  .wcp-chip{padding:10px 6px;min-height:72px}
+  .wcp-chip .wcp-ic{font-size:18px}
+  .wcp-chip .wcp-lb{font-size:11px}
+}
 .profile-stats-row{display:flex;gap:28px;text-align:center}
 .pstat-n{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;background:var(--grad-text);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .pstat-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-family:'Space Mono',monospace}
@@ -706,8 +735,8 @@ nav ul a:hover{color:var(--ink)}
     <h1>Rate Every <span class="outline">World Cup 2026</span> Venue.</h1>
     <p><strong>16 host cities. One score.</strong> The only stadium review community built around a real 6-category scoring system — from pre-game traffic to post-game surroundings. Score every venue, earn your World Cup Scout badge, and decide where to fly before the matches sell out.</p>
     <div class="hero-btns">
-      <button class="btn btn-grad" onclick="filterHomeByLeague('WORLDCUP', document.querySelector('.lf-btn[onclick*=WORLDCUP]')); document.getElementById('home-venue-grid')?.scrollIntoView({behavior:'smooth',block:'start'})">⚽ See WC 2026 Venues</button>
-      <button class="btn btn-outline" onclick="handleReviewClick()">Submit a Review</button>
+      <button class="btn btn-grad" onclick="openWcPicker()">🎯 Find Your WC Venue</button>
+      <button class="btn btn-outline" onclick="filterHomeByLeague('WORLDCUP', document.querySelector('.lf-btn[onclick*=WORLDCUP]')); document.getElementById('home-venue-grid')?.scrollIntoView({behavior:'smooth',block:'start'})">See All 16 Venues</button>
     </div>
     <div class="hero-venue-strip" id="hero-venue-strip" style="display:none"></div>
     <div class="community-strip">
@@ -1235,6 +1264,36 @@ nav ul a:hover{color:var(--ink)}
   </div>
 </div>
 
+<!-- WORLD CUP VENUE PICKER MODAL -->
+<div class="modal-bg" id="modal-wc-picker">
+  <div class="modal-box wcp-box">
+    <div class="modal-hdr">
+      <div>
+        <h2 style="margin:0">⚽ Find Your World Cup Venue</h2>
+        <div style="font-size:12px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.4px;margin-top:4px">Pick what matters most. We'll show you where to go.</div>
+      </div>
+      <button class="close-x" onclick="closeModal('wc-picker')">✕</button>
+    </div>
+    <div id="wcp-step-pick">
+      <div class="wcp-grid" id="wcp-grid"><!-- populated by JS --></div>
+      <div class="wcp-actions">
+        <div id="wcp-selection-count" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.4px">Pick at least 1</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" style="padding:8px 14px;font-size:13px" onclick="wcpReset()">↺ Reset</button>
+          <button class="btn btn-grad" id="wcp-see-btn" style="padding:8px 18px;font-size:13px" onclick="wcpComputeResults()" disabled>See My Venues →</button>
+        </div>
+      </div>
+    </div>
+    <div id="wcp-step-results" style="display:none">
+      <div id="wcp-results-list"></div>
+      <div class="wcp-actions">
+        <button class="btn btn-outline" style="padding:8px 14px;font-size:13px" onclick="wcpBackToPick()">← Refine selection</button>
+        <button class="btn btn-grad" style="padding:8px 18px;font-size:13px" onclick="closeModal('wc-picker')">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- USER PROFILE MODAL -->
 <div class="modal-bg" id="modal-user-profile">
   <div class="modal-box" style="max-width:500px;width:90%">
@@ -1559,6 +1618,181 @@ function isWorldCupVenue(v) {
 function wcBadgeHtml(variant) {
   const cls = variant === 'hero' ? 'wc-badge hero' : 'wc-badge';
   return `<span class="${cls}" title="2026 FIFA World Cup host venue">World Cup 2026</span>`;
+}
+
+// ── WC VENUE PICKER (superlative quiz) ──────────────────────────────
+// Each superlative has its own icon + color so chips and result tags
+// are instantly distinguishable. Runner-ups are deduped at use time.
+const _WC2026_SUPERLATIVES = [
+  { key:'atmosphere', label:'Best Atmosphere',          icon:'🎉', color:'#ef4444', winner:'Lumen Field',             ru:['Lincoln Financial Field','Hard Rock Stadium','Arrowhead Stadium'] },
+  { key:'city',       label:'Best City Experience',     icon:'🏙', color:'#8b5cf6', winner:'BC Place',                ru:['Lumen Field','BMO Field'] },
+  { key:'postgame',   label:'Best Post-Game Experience', icon:'🌃', color:'#6366f1', winner:'BMO Field',              ru:['BC Place'] },
+  { key:'acoustics',  label:'Best Stadium Acoustics',   icon:'🔊', color:'#06b6d4', winner:"Levi's Stadium",          ru:['SoFi Stadium'] },
+  { key:'overall',    label:'Best Overall Experience',  icon:'⭐', color:'#f59e0b', winner:'SoFi Stadium',             ru:['Estadio Akron','Estadio BBVA'] },
+  { key:'seating',    label:'Best Seating',             icon:'💺', color:'#3b82f6', winner:'Lincoln Financial Field',  ru:['Gillette Stadium'] },
+  { key:'drinks',     label:'Best Drink Options',       icon:'🍻', color:'#d97706', winner:'Gillette Stadium',         ru:['Lincoln Financial Field',"Levi's Stadium",'SoFi Stadium'] },
+  { key:'vibes',      label:'Best Vibes',               icon:'✨', color:'#ec4899', winner:'Hard Rock Stadium',        ru:['Estadio Azteca','Estadio BBVA'] },
+  { key:'sightlines', label:'Best Sightlines',          icon:'👁',  color:'#14b8a6', winner:'AT&T Stadium',             ru:['SoFi Stadium','Metlife Stadium','Mercedes Benz Stadium'] },
+  { key:'rideshare',  label:'Best Rideshare',           icon:'🚕', color:'#eab308', winner:'NRG Stadium',              ru:[] },
+  { key:'food',       label:'Best Food Options',        icon:'🍔', color:'#22c55e', winner:'Arrowhead Stadium',        ru:["Levi's Stadium",'SoFi Stadium','Gillette Stadium','NRG Stadium','Estadio Akron'] },
+  { key:'foodprice',  label:'Best Food Prices',         icon:'💰', color:'#10b981', winner:'Mercedes Benz Stadium',    ru:['Estadio Azteca','Estadio BBVA'] },
+  { key:'history',    label:'Best History',             icon:'📜', color:'#a16207', winner:'Estadio Azteca',           ru:['Arrowhead Stadium'] },
+  { key:'pregame',    label:'Best Pre-Game Experience',  icon:'🏁', color:'#84cc16', winner:'Estadio Akron',           ru:['Estadio BBVA'] },
+  { key:'views',      label:'Best Stadium Views',       icon:'🏞',  color:'#0ea5e9', winner:'Estadio BBVA',             ru:['Lumen Field'] },
+  { key:'security',   label:'Best Security',            icon:'🛡',  color:'#64748b', winner:'Estadio Azteca',           ru:['Estadio Akron','Metlife Stadium'] }
+];
+
+const _wcpSelected = new Set();
+let _wcpVenueRows = null; // cached venue lookup for navigating to detail pages
+
+function _wcpNormName(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+async function _wcpEnsureVenues() {
+  if (Array.isArray(_wcpVenueRows)) return _wcpVenueRows;
+  try {
+    const data = await _sbGet('venues?select=id,name,city,state&order=name');
+    _wcpVenueRows = Array.isArray(data) ? data : [];
+  } catch(e) { _wcpVenueRows = []; }
+  return _wcpVenueRows;
+}
+
+function _wcpFindVenueRow(name) {
+  const target = _wcpNormName(name);
+  if (!target || !Array.isArray(_wcpVenueRows)) return null;
+  // Exact alnum match first
+  for (const v of _wcpVenueRows) {
+    if (_wcpNormName(v.name) === target) return v;
+  }
+  // Substring fallback (handles "GEHA Field at Arrowhead Stadium")
+  for (const v of _wcpVenueRows) {
+    const n = _wcpNormName(v.name);
+    if (n && (n.includes(target) || target.includes(n))) return v;
+  }
+  return null;
+}
+
+function _wcpChipHtml(s) {
+  return `<div class="wcp-chip ${_wcpSelected.has(s.key) ? 'active' : ''}"
+      style="--sl-color:${s.color}"
+      data-key="${s.key}"
+      onclick="wcpToggle('${s.key}')">
+      <div class="wcp-ic">${s.icon}</div>
+      <div class="wcp-lb">${_escapeHtml(s.label)}</div>
+    </div>`;
+}
+
+function openWcPicker() {
+  // Always reset to the picker step when opening fresh
+  _wcpEnsureVenues();
+  document.getElementById('wcp-step-pick').style.display = 'block';
+  document.getElementById('wcp-step-results').style.display = 'none';
+  document.getElementById('wcp-grid').innerHTML = _WC2026_SUPERLATIVES.map(_wcpChipHtml).join('');
+  _wcpUpdateActionBar();
+  openModal('wc-picker');
+}
+
+function wcpToggle(key) {
+  if (_wcpSelected.has(key)) _wcpSelected.delete(key);
+  else _wcpSelected.add(key);
+  // Re-render only the chip that changed, not the whole grid
+  const chip = document.querySelector(`.wcp-chip[data-key="${key}"]`);
+  if (chip) chip.classList.toggle('active', _wcpSelected.has(key));
+  _wcpUpdateActionBar();
+}
+
+function _wcpUpdateActionBar() {
+  const count = _wcpSelected.size;
+  const countEl = document.getElementById('wcp-selection-count');
+  const btn = document.getElementById('wcp-see-btn');
+  if (countEl) {
+    countEl.textContent = count === 0
+      ? 'Pick at least 1'
+      : count === 1
+        ? '1 selected'
+        : `${count} selected`;
+  }
+  if (btn) btn.disabled = count === 0;
+}
+
+function wcpReset() {
+  _wcpSelected.clear();
+  document.querySelectorAll('.wcp-chip').forEach(c => c.classList.remove('active'));
+  _wcpUpdateActionBar();
+}
+
+function wcpBackToPick() {
+  document.getElementById('wcp-step-results').style.display = 'none';
+  document.getElementById('wcp-step-pick').style.display = 'block';
+}
+
+function wcpComputeResults() {
+  if (!_wcpSelected.size) return;
+  // Score venues: winner = 3 pts, runner-up = 1 pt. Track which superlatives
+  // contributed so we can render their tags on the result card.
+  const score = new Map(); // venueName -> { points, tags: [{superlative, role}] }
+  const bump = (venueName, superlative, role) => {
+    if (!venueName) return;
+    const key = venueName.trim();
+    if (!key) return;
+    const entry = score.get(key) || { points: 0, tags: [] };
+    entry.points += role === 'winner' ? 3 : 1;
+    entry.tags.push({ superlative, role });
+    score.set(key, entry);
+  };
+  _WC2026_SUPERLATIVES.forEach(s => {
+    if (!_wcpSelected.has(s.key)) return;
+    bump(s.winner, s, 'winner');
+    // Dedupe runner-ups (input had duplicates in some categories)
+    const seenRu = new Set();
+    (s.ru || []).forEach(r => {
+      const norm = _wcpNormName(r);
+      if (seenRu.has(norm)) return;
+      seenRu.add(norm);
+      bump(r, s, 'runner');
+    });
+  });
+
+  // Sort by points desc, then by winner-count desc (prefer venues that
+  // actually won the categories, not just runner-ups)
+  const ranked = Array.from(score.entries()).map(([name, e]) => ({
+    name,
+    points: e.points,
+    winnerCount: e.tags.filter(t => t.role === 'winner').length,
+    tags: e.tags
+  })).sort((a, b) => b.points - a.points || b.winnerCount - a.winnerCount);
+
+  // Show top 3
+  const top = ranked.slice(0, 3);
+  const listEl = document.getElementById('wcp-results-list');
+  if (!top.length) {
+    listEl.innerHTML = '<div class="wcp-empty">No matches found for your selection. Try picking different categories.</div>';
+  } else {
+    listEl.innerHTML = top.map((v, i) => {
+      const venueRow = _wcpFindVenueRow(v.name);
+      const detailClick = venueRow
+        ? `onclick="closeModal('wc-picker'); loadVenueDetail('${venueRow.id}', ${JSON.stringify(venueRow.name)})"`
+        : '';
+      const tagsHtml = v.tags.map(t => `
+        <span class="wcp-tag ${t.role === 'runner' ? 'runner' : ''}" style="--sl-color:${t.superlative.color}">
+          ${t.superlative.icon} ${_escapeHtml(t.superlative.label.replace(/^Best /,''))}${t.role === 'runner' ? ' · RU' : ''}
+        </span>`).join('');
+      const rank = i === 0 ? '🏆 Top Match' : i === 1 ? '🥈 #2' : '🥉 #3';
+      const meta = venueRow ? [venueRow.city, venueRow.state].filter(Boolean).join(', ') : '';
+      return `<div class="wcp-result-card ${i === 0 ? 'top' : ''}" ${detailClick}>
+        <div>
+          <span class="wcp-result-rank">${rank}</span>
+          <span class="wcp-result-name">${_escapeHtml(v.name)}</span>
+        </div>
+        ${meta ? `<div class="wcp-result-meta">${_escapeHtml(meta)} · ${v.points} pts (${v.winnerCount} 🏆 / ${v.tags.length - v.winnerCount} RU)</div>` : `<div class="wcp-result-meta">${v.points} pts (${v.winnerCount} 🏆 / ${v.tags.length - v.winnerCount} RU)</div>`}
+        <div class="wcp-result-tags">${tagsHtml}</div>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('wcp-step-pick').style.display = 'none';
+  document.getElementById('wcp-step-results').style.display = 'block';
 }
 
 // 2026 FIFA World Cup match schedule per host venue.
