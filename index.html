@@ -1291,8 +1291,11 @@ nav ul a:hover{color:var(--ink)}
     <div id="wcp-step-results" style="display:none">
       <div id="wcp-results-list"></div>
       <div class="wcp-actions">
-        <button class="btn btn-outline" style="padding:8px 14px;font-size:13px" onclick="wcpBackToPick()">← Refine selection</button>
-        <button class="btn btn-grad" style="padding:8px 18px;font-size:13px" onclick="closeModal('wc-picker')">Done</button>
+        <button class="btn btn-outline" style="padding:8px 14px;font-size:13px" onclick="wcpBackToPick()">← Refine</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" style="padding:8px 14px;font-size:13px" onclick="copyPickerShareLink()">🔗 Share Link</button>
+          <button class="btn btn-grad" style="padding:8px 18px;font-size:13px" onclick="closeModal('wc-picker')">Done</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1697,6 +1700,55 @@ function openWcPicker() {
   openModal('wc-picker');
 }
 
+// Preselect chips from URL like ?picker=overall,vibes,food
+function _wcpReadUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('picker');
+    if (!raw) return false;
+    _wcpSelected.clear();
+    raw.split(',').forEach(k => {
+      const clean = k.trim().toLowerCase();
+      if (_WC2026_SUPERLATIVES.some(s => s.key === clean)) _wcpSelected.add(clean);
+    });
+    return _wcpSelected.size > 0;
+  } catch(e) { return false; }
+}
+
+function _wcpWriteUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (_wcpSelected.size) {
+      params.set('picker', Array.from(_wcpSelected).join(','));
+    } else {
+      params.delete('picker');
+    }
+    const qs = params.toString();
+    const newUrl = window.location.pathname + (qs ? '?' + qs : '') + window.location.hash;
+    window.history.replaceState({}, '', newUrl);
+  } catch(e) { /* non-fatal */ }
+}
+
+async function copyPickerShareLink() {
+  try {
+    const url = window.location.origin + window.location.pathname + '?picker=' + Array.from(_wcpSelected).join(',');
+    await navigator.clipboard.writeText(url);
+    showToast('🔗 Share link copied!');
+  } catch(e) {
+    showToast('Copy failed — your browser may have blocked clipboard access', 'error');
+  }
+}
+
+// Auto-open the picker on page load if the URL has ?picker=... and
+// immediately show results. Lets shared links land directly on results.
+function _wcpMaybeAutoOpen() {
+  if (_wcpReadUrl()) {
+    openWcPicker();
+    // Give the modal a beat to render then jump to results
+    setTimeout(() => { try { wcpComputeResults(); } catch(e) {} }, 60);
+  }
+}
+
 function wcpToggle(key) {
   if (_wcpSelected.has(key)) _wcpSelected.delete(key);
   else _wcpSelected.add(key);
@@ -1797,6 +1849,7 @@ function wcpComputeResults() {
 
   document.getElementById('wcp-step-pick').style.display = 'none';
   document.getElementById('wcp-step-results').style.display = 'block';
+  _wcpWriteUrl();
 }
 
 // 2026 FIFA World Cup match schedule per host venue.
@@ -4242,6 +4295,9 @@ sb.auth.onAuthStateChange(async (event, session) => {
   loadHomeVenues();
   loadTopVenues();
   loadStats();
+  // If the user arrived from a ?picker=... share link, auto-open the picker
+  // with their selections pre-applied and jump to results.
+  try { _wcpMaybeAutoOpen(); } catch(e) {}
 })();
 
 // ═══════════════════════════════════
