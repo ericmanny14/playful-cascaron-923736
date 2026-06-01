@@ -295,7 +295,11 @@ nav ul a:hover{color:var(--ink)}
 
 /* ── VENUE PAGE ── */
 .venue-hero{background:var(--bg2);border-bottom:1px solid var(--border);padding:84px 32px 0;position:relative;overflow:hidden}
-.venue-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 70% 50%,rgba(30,127,212,.08) 0%,transparent 65%);pointer-events:none}
+.venue-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 70% 50%,rgba(30,127,212,.08) 0%,transparent 65%);pointer-events:none;z-index:1}
+.venue-hero-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity .4s;z-index:0}
+.venue-hero-bg.has-image{opacity:.55}
+.venue-hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,10,15,.35) 0%,rgba(10,10,15,.85) 75%,var(--bg2) 100%)}
+.venue-hero-inner{position:relative;z-index:2}
 .venue-hero-inner{max-width:1000px;margin:0 auto;position:relative}
 .back-link{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;margin-bottom:28px;transition:color .15s}
 .back-link:hover{color:var(--blue-light)}
@@ -1042,7 +1046,8 @@ nav ul a:hover{color:var(--ink)}
 
 <!-- ══════════════ VENUE PAGE ══════════════ -->
 <div id="page-venue" class="page">
-  <div class="venue-hero">
+  <div class="venue-hero" id="venue-hero">
+    <div class="venue-hero-bg" id="venue-hero-bg"></div>
     <div class="venue-hero-inner">
       <div class="back-link" onclick="showPage('home')">← All Venues</div>
       <div class="venue-hero-row">
@@ -3660,6 +3665,18 @@ async function loadVenueDetail(venueId, venueName) {
     } catch(e) { /* non-fatal */ }
 
     setEl('venue-sport-tag', [venue.sport, venue.team].filter(Boolean).join(' · ') || 'Venue');
+    // Venue hero background image (banner_url is the public Supabase Storage URL)
+    const _heroBg = document.getElementById('venue-hero-bg');
+    if (_heroBg) {
+      const bgUrl = venue.banner_url || venue.admin_scoresheet?.hero_image_url;
+      if (bgUrl) {
+        _heroBg.style.backgroundImage = `url('${bgUrl}')`;
+        _heroBg.classList.add('has-image');
+      } else {
+        _heroBg.style.backgroundImage = '';
+        _heroBg.classList.remove('has-image');
+      }
+    }
     const _wcSlot = document.getElementById('venue-wc-badge-slot');
     if (_wcSlot) _wcSlot.innerHTML = isWorldCupVenue(venue) ? wcBadgeHtml('hero') : '';
     try { renderVenueWCGames(venue); } catch(e) { console.warn('renderVenueWCGames error:', e); }
@@ -3787,7 +3804,7 @@ async function loadHomeVenues() {
   if (_venueCache && (now - _venueCacheTime) < VENUE_CACHE_TTL) {
     venues = _venueCache;
   } else {
-    const data = await _sbGet('venues?select=id,name,city,state,sport,team,admin_scoresheet&order=name');
+    const data = await _sbGet('venues?select=id,name,city,state,sport,team,banner_url,admin_scoresheet&order=name');
     if (!data) { grid.innerHTML = '<div class="empty-state"><p>Error loading venues. Please refresh.</p></div>'; return; }
     _venueCache = data;
     _venueCacheTime = now;
@@ -3882,8 +3899,9 @@ function _feiRowHtml(v, rank) {
     ? `<div class="fei-score">${score.toFixed(2)}</div><div class="fei-score-label">141 Score</div>`
     : `<div class="fei-score no-score">–</div><div class="fei-score-label">Unrated</div>`;
 
-  // Image: admin_scoresheet.hero_image_url, with city-initials fallback
-  const imageUrl = sc.hero_image_url;
+  // Image: venues.banner_url is the canonical source (uploaded via admin
+  // panel); admin_scoresheet.hero_image_url is the legacy URL-paste fallback.
+  const imageUrl = v.banner_url || sc.hero_image_url;
   const initials = (v.name || '?').split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase();
   const imageStyle = imageUrl ? `background-image:url('${_escapeHtml(imageUrl)}')` : '';
   const imageContent = imageUrl ? '' : _escapeHtml(initials);
@@ -4048,7 +4066,7 @@ async function loadVenueBrowse() {
   if (_venueCache && (now - _venueCacheTime) < VENUE_CACHE_TTL) {
     venues = _venueCache;
   } else {
-    const data = await _sbGet('venues?select=id,name,city,state,sport,team,admin_scoresheet&order=name');
+    const data = await _sbGet('venues?select=id,name,city,state,sport,team,banner_url,admin_scoresheet&order=name');
     if (!Array.isArray(data)) { showToast('Error loading venues', 'error'); return; }
     _venueCache = data;
     _venueCacheTime = now;
@@ -5221,6 +5239,9 @@ async function saveAdminVenue() {
       description: document.getElementById('adv-description')?.value.trim() || null,
       is_featured: document.getElementById('adv-featured')?.checked ?? false,
       tags:        tags.length ? tags : null,
+      // Only write banner_url when the admin actually uploaded a new image
+      // this session — otherwise leave the existing column value alone.
+      ...(_pendingBannerUrl ? { banner_url: _pendingBannerUrl } : {}),
       ...(scoresheetPayload && { admin_scoresheet: scoresheetPayload }),
     };
 
@@ -5304,6 +5325,7 @@ async function saveAdminVenue() {
     }
 
     _venueCache = null;
+    _pendingBannerUrl = null; // clear pending upload so next venue doesn't inherit it
     showToast('✅ Venue saved!');
     // Defer reloads slightly so they don't race with any pending SDK auth-refresh
     // calls and block subsequent venue page loads.
@@ -5880,15 +5902,89 @@ function addTagPill(tag) {
 }
 
 // ── ADMIN PHOTO HELPERS ──
-function previewBanner(input) {
+// Holds the most-recently-uploaded banner URL between previewBanner() and
+// saveAdminVenue(). Cleared after a successful save so it doesn't apply
+// to the next venue the admin opens.
+let _pendingBannerUrl = null;
+
+// Upload an image to Supabase Storage. Returns the public URL.
+// Bucket: 'venue-banners' (create in Supabase Storage with public access).
+async function uploadImageToStorage(file, folder = 'venue-banners') {
+  if (!file) throw new Error('No file provided');
+  if (!isAdmin()) throw new Error('Admin access required');
+  if (!/^image\//.test(file.type || '')) throw new Error('File must be an image');
+  if (file.size > 8 * 1024 * 1024) throw new Error('Image must be under 8 MB');
+
+  // Pull access token (same pattern saveAdminVenue uses)
+  let accessToken = null;
+  try {
+    const raw = localStorage.getItem('vennu-auth');
+    accessToken = raw ? JSON.parse(raw)?.access_token : null;
+  } catch(e) {}
+  if (!accessToken) throw new Error('Not signed in');
+
+  const SURL = 'https://jugdgtyhxpqfoowijtbt.supabase.co';
+  const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1Z2RndHloeHBxZm9vd2lqdGJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MzA4MTksImV4cCI6MjA4OTEwNjgxOX0.m0aI2THlLSLXsoGQPMCmU1BnFiVnhhrbCi7qCefyVvY';
+
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const slug = (file.name || 'image')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9-]+/g, '_')
+    .slice(0, 40);
+  const path = `${Date.now()}_${slug}.${ext}`;
+  const uploadUrl = `${SURL}/storage/v1/object/${folder}/${encodeURIComponent(path)}`;
+
+  const resp = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      apikey: SKEY,
+      Authorization: 'Bearer ' + accessToken,
+      'Content-Type': file.type || 'application/octet-stream',
+      'x-upsert': 'true'
+    },
+    body: file
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    if (resp.status === 404) {
+      throw new Error('Bucket "venue-banners" missing — create it in Supabase Storage (Public)');
+    }
+    throw new Error(`Upload failed (${resp.status}): ${errText.slice(0, 200) || 'unknown error'}`);
+  }
+
+  // Public URL — works because bucket is public
+  return `${SURL}/storage/v1/object/public/${folder}/${encodeURIComponent(path)}`;
+}
+
+async function previewBanner(input) {
   const file = input.files[0];
   if (!file) return;
+  const preview = document.getElementById('adm-banner-preview');
+  const img = document.getElementById('adm-banner-img');
+
+  // Instant local preview before upload completes
   const reader = new FileReader();
   reader.onload = e => {
-    document.getElementById('adm-banner-img').src = e.target.result;
-    document.getElementById('adm-banner-preview').style.display = 'block';
+    if (img) img.src = e.target.result;
+    if (preview) preview.style.display = 'block';
   };
   reader.readAsDataURL(file);
+
+  // Upload to Supabase Storage in the background
+  try {
+    showToast('📤 Uploading image…');
+    const url = await uploadImageToStorage(file);
+    _pendingBannerUrl = url;
+    // Swap the local data-URL preview to the public CDN URL so what the
+    // admin sees is exactly what visitors will see.
+    if (img) img.src = url;
+    showToast('✅ Image uploaded — click "Save Venue" to publish');
+  } catch(e) {
+    console.error('[previewBanner] upload error:', e);
+    showToast('Upload failed: ' + e.message, 'error');
+    _pendingBannerUrl = null;
+  }
 }
 
 function previewPdfFile(input) {
