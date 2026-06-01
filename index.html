@@ -1991,7 +1991,7 @@ function wcpComputeResults() {
     listEl.innerHTML = top.map((v, i) => {
       const venueRow = _wcpFindVenueRow(v.name);
       const detailClick = venueRow
-        ? `onclick="closeWcPicker(); loadVenueDetail('${venueRow.id}', ${JSON.stringify(venueRow.name)})"`
+        ? `onclick="closeWcPicker(); loadVenueDetail('${venueRow.id}','${(venueRow.name || '').replace(/'/g,"\\'")}')"`
         : '';
       const tagsHtml = v.tags.map(t => `
         <span class="wcp-tag ${t.role === 'runner' ? 'runner' : ''}" style="--sl-color:${t.superlative.color}">
@@ -3923,7 +3923,7 @@ function _feiRowHtml(v, rank) {
   const bestHtml = best ? `<div class="fei-best-for">"${_escapeHtml(best)}"</div>` : '';
 
   return `
-    <a class="fei-row ${rank === 1 ? 'is-top' : ''}" href="#" onclick="event.preventDefault(); handleVenueClick('${v.id}',${JSON.stringify(v.name)})">
+    <a class="fei-row ${rank === 1 ? 'is-top' : ''}" href="#" onclick="event.preventDefault(); handleVenueClick('${v.id}','${(v.name || '').replace(/'/g,"\\'")}')">
       <div class="fei-rank">#${rank}</div>
       <div class="fei-image ${imageUrl ? 'has-photo' : ''}" style="${imageStyle}">${imageContent}</div>
       <div class="fei-body">
